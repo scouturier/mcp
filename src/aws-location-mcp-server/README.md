@@ -32,19 +32,24 @@ Configure the server in your MCP settings:
 
 ```json
 {
-  "aws-location-mcp-server": {
-    "command": "/path/to/venv/bin/python",
-    "args": ["-m", "awslabs.aws_location_server.server"],
-    "env": {
-      "AWS_PROFILE": "your-aws-profile",
-      "AWS_REGION": "us-east-1",
-      "AWS_LOCATION_PLACE_INDEX": "your-place-index-name"
-    },
-    "disabled": false,
-    "autoApprove": []
+  "mcpServers": {
+    "awslabs.aws-location-mcp-server": {
+      "command": "uvx",
+      "args": ["awslabs.aws-location-mcp-server@latest"],
+      "env": {
+        "AWS_PROFILE": "your-aws-profile",
+        "AWS_REGION": "us-east-1",
+        "FASTMCP_LOG_LEVEL": "ERROR",
+        "AWS_LOCATION_PLACE_INDEX": "your-place-index-name"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
   }
 }
 ```
+
+> **Important Note**: Make sure to use `awslabs.aws-location-mcp-server@latest` in the args array, not `awslabs.aws_location_server@latest`. The package name must match the repository name with hyphens (-), not underscores (_).
 
 ### Environment Variables
 
