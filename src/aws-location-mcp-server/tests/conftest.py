@@ -42,4 +42,10 @@ def mock_boto3_client():
 def mock_context():
     """Create a mock MCP context for testing."""
     context = MagicMock()
+
+    # Make the error method awaitable
+    async def async_error(*args, **kwargs):
+        return None
+
+    context.error = MagicMock(side_effect=async_error)
     return context
