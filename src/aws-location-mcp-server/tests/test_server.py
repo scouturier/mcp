@@ -125,8 +125,9 @@ def test_location_client_initialization():
     # Test with environment variables
     with patch.dict(os.environ, {
         'AWS_REGION': 'us-west-2',
-        'AWS_ACCESS_KEY_ID': 'test-key',
-        'AWS_SECRET_ACCESS_KEY': 'test-secret',
+        'AWS_ACCESS_KEY_ID: 'ASIAIOSFODNN7EXAMPLE'
+        'AWS_SECRET_ACCESS_KEY': 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
+        'AWS_SESSION_TOKEN': '=AQoEXAMPLEH4aoAH0gNCAPy...truncated...zrkuWJOgQs8IZZaIv2BXIa2R4Olgk'
         'AWS_LOCATION_PLACE_INDEX': 'TestPlaceIndex'
     }):
         with patch('boto3.client') as mock_boto3_client:
