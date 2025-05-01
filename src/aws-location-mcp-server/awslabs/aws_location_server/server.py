@@ -11,16 +11,15 @@
 """AWS Location Service MCP Server implementation."""
 
 import argparse
-import os
-import sys
-from typing import Dict, List, Optional
-
 import boto3
 import botocore.config
 import botocore.exceptions
+import os
+import sys
 from loguru import logger
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import Field
+from typing import Dict
 
 
 # Set up logging
@@ -69,21 +68,19 @@ class LocationClient:
         """Initialize the AWS Location Service client."""
         # Get AWS region from environment variable or use default
         self.aws_region = os.environ.get('AWS_REGION', 'us-east-1')
-        
+
         # Initialize client
         self.location_client = None
-        
+
         # Check for AWS credentials in environment variables
         aws_access_key = os.environ.get('AWS_ACCESS_KEY_ID')
         aws_secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
-        
+
         # Set a timeout for boto3 operations
         config = botocore.config.Config(
-            connect_timeout=15,
-            read_timeout=15,
-            retries={'max_attempts': 3}
+            connect_timeout=15, read_timeout=15, retries={'max_attempts': 3}
         )
-        
+
         # Try to initialize the client using explicit credentials if available
         try:
             if aws_access_key and aws_secret_key:
@@ -92,22 +89,24 @@ class LocationClient:
                     'aws_access_key_id': aws_access_key,
                     'aws_secret_access_key': aws_secret_key,
                     'region_name': self.aws_region,
-                    'config': config
+                    'config': config,
                 }
-                
+
                 self.location_client = boto3.client('location', **client_args)
             else:
                 # Fall back to default credential resolution
-                self.location_client = boto3.client('location', region_name=self.aws_region, config=config)
-                
-            logger.debug(f"AWS Location client initialized for region {self.aws_region}")
+                self.location_client = boto3.client(
+                    'location', region_name=self.aws_region, config=config
+                )
+
+            logger.debug(f'AWS Location client initialized for region {self.aws_region}')
         except Exception as e:
-            logger.error(f"Failed to initialize AWS Location client: {str(e)}")
+            logger.error(f'Failed to initialize AWS Location client: {str(e)}')
             self.location_client = None
-        
+
         # Get place index from environment variable or use default
         self.default_place_index = os.environ.get('AWS_LOCATION_PLACE_INDEX', 'ExamplePlaceIndex')
-        logger.debug(f"Using place index: {self.default_place_index}")
+        logger.debug(f'Using place index: {self.default_place_index}')
 
 
 # Initialize the location client
@@ -117,10 +116,10 @@ location_client = LocationClient()
 @mcp.tool()
 async def search_places(
     ctx: Context,
-    query: str = Field(description="Search query (address, place name, etc.)"),
+    query: str = Field(description='Search query (address, place name, etc.)'),
     max_results: int = Field(
         default=5,
-        description="Maximum number of results to return",
+        description='Maximum number of results to return',
         ge=1,
         le=50,
     ),
@@ -158,71 +157,66 @@ async def search_places(
         Dictionary containing the search results
     """
     if not location_client.location_client:
-        error_msg = "AWS Location client not initialized. Please check AWS credentials and region."
+        error_msg = 'AWS Location client not initialized. Please check AWS credentials and region.'
         logger.error(error_msg)
         await ctx.error(error_msg)
-        return {"error": error_msg}
-    
-    logger.debug(f"Searching places with query: {query}, max_results: {max_results}")
-    
+        return {'error': error_msg}
+
+    logger.debug(f'Searching places with query: {query}, max_results: {max_results}')
+
     try:
         # Call AWS Location Service
         response = location_client.location_client.search_place_index_for_text(
-            IndexName=location_client.default_place_index,
-            Text=query,
-            MaxResults=max_results
+            IndexName=location_client.default_place_index, Text=query, MaxResults=max_results
         )
-        
+
         # Process results
         places = []
         for result in response.get('Results', []):
             place = result.get('Place', {})
-            
+
             # Extract place details
             place_data = {
                 'name': place.get('Label', 'Unknown'),
                 'coordinates': {
                     'longitude': place.get('Geometry', {}).get('Point', [0, 0])[0],
-                    'latitude': place.get('Geometry', {}).get('Point', [0, 0])[1]
+                    'latitude': place.get('Geometry', {}).get('Point', [0, 0])[1],
                 },
                 'country': place.get('Country', ''),
                 'region': place.get('Region', ''),
-                'municipality': place.get('Municipality', '')
+                'municipality': place.get('Municipality', ''),
             }
             places.append(place_data)
-        
-        result = {
-            'query': query,
-            'places': places
-        }
-        
-        logger.debug(f"Found {len(places)} places for query: {query}")
+
+        result = {'query': query, 'places': places}
+
+        logger.debug(f'Found {len(places)} places for query: {query}')
         return result
-        
+
     except botocore.exceptions.ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', '')
         error_msg = str(e)
-        
-        if error_code == "ResourceNotFoundException" and "place index" in error_msg.lower():
-            error_msg = f"Place index not found. Please create a place index in AWS Location Service or specify one with AWS_LOCATION_PLACE_INDEX environment variable."
+
+        if error_code == 'ResourceNotFoundException' and 'place index' in error_msg.lower():
+            error_msg = 'Place index not found. Please create a place index in AWS Location Service or specify one with AWS_LOCATION_PLACE_INDEX environment variable.'
         else:
-            error_msg = f"AWS Location Service error: {error_msg}"
-            
+            error_msg = f'AWS Location Service error: {error_msg}'
+
         logger.error(error_msg)
         await ctx.error(error_msg)
-        return {"error": error_msg}
-        
+        return {'error': error_msg}
+
     except Exception as e:
-        error_msg = f"Error searching places: {str(e)}"
+        error_msg = f'Error searching places: {str(e)}'
         logger.error(error_msg)
         await ctx.error(error_msg)
-        return {"error": error_msg}
+        return {'error': error_msg}
 
 
 @mcp.tool()
 async def get_coordinates(
     ctx: Context,
-    location: str = Field(description="Location name (city, address, landmark, etc.)"),
+    location: str = Field(description='Location name (city, address, landmark, etc.)'),
 ) -> Dict:
     """Get coordinates for a location.
 
@@ -255,63 +249,58 @@ async def get_coordinates(
         Dictionary containing the location details and coordinates
     """
     if not location_client.location_client:
-        error_msg = "AWS Location client not initialized. Please check AWS credentials and region."
+        error_msg = 'AWS Location client not initialized. Please check AWS credentials and region.'
         logger.error(error_msg)
         await ctx.error(error_msg)
-        return {"error": error_msg}
-    
-    logger.debug(f"Getting coordinates for location: {location}")
-    
+        return {'error': error_msg}
+
+    logger.debug(f'Getting coordinates for location: {location}')
+
     try:
         # Search for the location using AWS Location Service
         response = location_client.location_client.search_place_index_for_text(
-            IndexName=location_client.default_place_index,
-            Text=location,
-            MaxResults=1
+            IndexName=location_client.default_place_index, Text=location, MaxResults=1
         )
-        
+
         if not response.get('Results') or len(response['Results']) == 0:
-            error_msg = f"No results found for location: {location}"
+            error_msg = f'No results found for location: {location}'
             logger.error(error_msg)
             await ctx.error(error_msg)
-            return {"error": error_msg}
-        
+            return {'error': error_msg}
+
         place = response['Results'][0]['Place']
         coordinates = place['Geometry']['Point']  # [longitude, latitude]
-        
+
         result = {
             'location': location,
             'formatted_address': place.get('Label', ''),
-            'coordinates': {
-                'longitude': coordinates[0],
-                'latitude': coordinates[1]
-            },
+            'coordinates': {'longitude': coordinates[0], 'latitude': coordinates[1]},
             'country': place.get('Country', ''),
             'region': place.get('Region', ''),
-            'municipality': place.get('Municipality', '')
+            'municipality': place.get('Municipality', ''),
         }
-        
-        logger.debug(f"Found coordinates for location: {location}")
+
+        logger.debug(f'Found coordinates for location: {location}')
         return result
-        
+
     except botocore.exceptions.ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', '')
         error_msg = str(e)
-        
-        if error_code == "ResourceNotFoundException" and "place index" in error_msg.lower():
-            error_msg = f"Place index not found. Please create a place index in AWS Location Service or specify one with AWS_LOCATION_PLACE_INDEX environment variable."
+
+        if error_code == 'ResourceNotFoundException' and 'place index' in error_msg.lower():
+            error_msg = 'Place index not found. Please create a place index in AWS Location Service or specify one with AWS_LOCATION_PLACE_INDEX environment variable.'
         else:
-            error_msg = f"AWS Location Service error: {error_msg}"
-            
+            error_msg = f'AWS Location Service error: {error_msg}'
+
         logger.error(error_msg)
         await ctx.error(error_msg)
-        return {"error": error_msg}
-        
+        return {'error': error_msg}
+
     except Exception as e:
-        error_msg = f"Error getting coordinates: {str(e)}"
+        error_msg = f'Error getting coordinates: {str(e)}'
         logger.error(error_msg)
         await ctx.error(error_msg)
-        return {"error": error_msg}
+        return {'error': error_msg}
 
 
 def main():

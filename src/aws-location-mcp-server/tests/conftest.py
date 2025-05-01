@@ -10,7 +10,6 @@
 # and limitations under the License.
 """Pytest configuration for AWS Location Service MCP Server tests."""
 
-import os
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -19,24 +18,22 @@ from unittest.mock import MagicMock, patch
 def mock_boto3_client():
     """Create a mock boto3 client for testing."""
     mock_client = MagicMock()
-    
+
     # Mock search_place_index_for_text response
     mock_client.search_place_index_for_text.return_value = {
         'Results': [
             {
                 'Place': {
                     'Label': 'Seattle, WA, USA',
-                    'Geometry': {
-                        'Point': [-122.3321, 47.6062]
-                    },
+                    'Geometry': {'Point': [-122.3321, 47.6062]},
                     'Country': 'USA',
                     'Region': 'Washington',
-                    'Municipality': 'Seattle'
+                    'Municipality': 'Seattle',
                 }
             }
         ]
     }
-    
+
     with patch('boto3.client', return_value=mock_client):
         yield mock_client
 
