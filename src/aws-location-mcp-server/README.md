@@ -19,7 +19,26 @@ Before using this MCP server, you need to:
 
 ## Installation
 
+There are two ways to install and configure the AWS Location MCP server:
+
+### Option 1: Using uvx (Recommended)
+
+This is the standard way to install MCP servers and is consistent with other AWS MCP servers:
+
 ```bash
+# Install the package using uvx
+uvx awslabs.aws-location-mcp-server@latest
+```
+
+### Option 2: Local Development Installation
+
+If you're developing or modifying the server, or if Option 1 doesn't work:
+
+```bash
+# Clone the repository (if you haven't already)
+git clone https://github.com/awslabs/mcp.git
+cd mcp/src/aws-location-mcp-server
+
 # Create a virtual environment
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
@@ -32,25 +51,97 @@ pip install -e .
 
 Configure the server in your MCP settings:
 
+### Option 1: Standard Configuration (Recommended)
+
 ```json
 {
   "mcpServers": {
     "github.com/awslabs/mcp/tree/main/src/aws-location-mcp-server": {
-      "command": "uvx",
-      "args": ["awslabs.aws-location-mcp-server@latest"],
-      "env": {
-        "AWS_PROFILE": "your-aws-profile",
-        "AWS_REGION": "us-east-1",
-        "FASTMCP_LOG_LEVEL": "ERROR"
-      },
-      "disabled": false,
       "autoApprove": [
         "search_places",
         "get_place",
         "reverse_geocode",
         "search_nearby",
         "search_places_open_now"
-      ]
+      ],
+      "disabled": false,
+      "timeout": 60,
+      "command": "uvx",
+      "args": [
+        "awslabs.aws-location-mcp-server@latest"
+      ],
+      "env": {
+        "AWS_PROFILE": "your-aws-profile",
+        "AWS_REGION": "us-east-1",
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "transportType": "stdio"
+    }
+  }
+}
+```
+
+### Option 2: Local Development Configuration - Direct Python Executable (Recommended for local development)
+
+This approach directly uses the Python executable from the virtual environment:
+
+```json
+{
+  "mcpServers": {
+    "github.com/awslabs/mcp/tree/main/src/aws-location-mcp-server": {
+      "autoApprove": [
+        "search_places",
+        "get_place",
+        "reverse_geocode",
+        "search_nearby",
+        "search_places_open_now"
+      ],
+      "disabled": false,
+      "timeout": 60,
+      "command": "/path/to/mcp/src/aws-location-mcp-server/.venv/bin/python",
+      "args": [
+        "-m",
+        "awslabs.aws_location_server.server"
+      ],
+      "env": {
+        "AWS_PROFILE": "your-aws-profile",
+        "AWS_REGION": "us-east-1",
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "transportType": "stdio"
+    }
+  }
+}
+```
+
+### Option 3: Local Development Configuration - Using bash
+
+An alternative approach using bash to activate the virtual environment:
+
+```json
+{
+  "mcpServers": {
+    "github.com/awslabs/mcp/tree/main/src/aws-location-mcp-server": {
+      "autoApprove": [
+        "search_places",
+        "get_place",
+        "reverse_geocode",
+        "search_nearby",
+        "search_places_open_now"
+      ],
+      "disabled": false,
+      "timeout": 60,
+      "command": "bash",
+      "args": [
+        "-c",
+        "cd /path/to/mcp/src/aws-location-mcp-server && source .venv/bin/activate && python -m awslabs.aws_location_server.server"
+      ],
+      "env": {
+        "AWS_PROFILE": "your-aws-profile",
+        "AWS_REGION": "us-east-1",
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "transportType": "stdio"
     }
   }
 }
