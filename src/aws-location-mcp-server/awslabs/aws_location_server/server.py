@@ -8,7 +8,7 @@
 # or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 # OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 # and limitations under the License.
-"""AWS Location Service MCP Server implementation."""
+"""AWS Location Service MCP Server implementation using geo-places client only."""
 
 import argparse
 import boto3
@@ -19,8 +19,8 @@ import sys
 from loguru import logger
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import Field
-from typing import Dict
-
+from typing import Dict, List, Optional
+from datetime import datetime
 
 # Set up logging
 logger.remove()
@@ -30,29 +30,29 @@ logger.add(sys.stderr, level=os.getenv('FASTMCP_LOG_LEVEL', 'WARNING'))
 mcp = FastMCP(
     'awslabs.aws-location-mcp-server',
     instructions="""
-    # AWS Location Service MCP Server
+    # AWS Location Service MCP Server (geo-places)
 
-    This server provides tools to interact with AWS Location Service capabilities, focusing on place search and geographical coordinates.
+    This server provides tools to interact with AWS Location Service geo-places capabilities, focusing on place search, details, and geocoding.
 
     ## Features
-
-    - Search for places using geocoding
-    - Get coordinates for locations
+    - Search for places using text queries
+    - Get place details by PlaceId
+    - Reverse geocode coordinates
+    - Search for places nearby a location
+    - Search for places open now (extension)
 
     ## Prerequisites
-
-    Before using this MCP server, you need to:
-
     1. Have an AWS account with AWS Location Service enabled
-    2. Create a Place Index in AWS Location Service (or the server will attempt to use an existing one)
-    3. Configure AWS CLI with your credentials and profile
+    2. Configure AWS CLI with your credentials and profile
+    3. Set AWS_REGION environment variable if not using default
 
     ## Best Practices
-
-    - For place searches, provide specific location details for more accurate results
-    - When searching for coordinates, include country or region information for better accuracy
-    - Use the search_places tool when you need multiple results for a query
-    - Use the get_coordinates tool when you need detailed information about a specific location
+    - Provide specific location details for more accurate results
+    - Use the search_places tool for general search
+    - Use get_place for details on a specific place
+    - Use reverse_geocode for lat/lon to address
+    - Use search_nearby for places near a point
+    - Use search_places_open_now to find currently open places (if supported by data)
     """,
     dependencies=[
         'boto3',
@@ -60,263 +60,456 @@ mcp = FastMCP(
     ],
 )
 
-
-class LocationClient:
-    """AWS Location Service client wrapper."""
-
+class GeoPlacesClient:
+    """AWS Location Service geo-places client wrapper."""
     def __init__(self):
-        """Initialize the AWS Location Service client."""
-        # Get AWS region from environment variable or use default
         self.aws_region = os.environ.get('AWS_REGION', 'us-east-1')
-
-        # Initialize client
-        self.location_client = None
-
-        # Check for AWS credentials in environment variables
+        self.geo_places_client = None
+        config = botocore.config.Config(connect_timeout=15, read_timeout=15, retries={'max_attempts': 3})
         aws_access_key = os.environ.get('AWS_ACCESS_KEY_ID')
         aws_secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
-
-        # Set a timeout for boto3 operations
-        config = botocore.config.Config(
-            connect_timeout=15, read_timeout=15, retries={'max_attempts': 3}
-        )
-
-        # Try to initialize the client using explicit credentials if available
         try:
             if aws_access_key and aws_secret_key:
-                # Create client with explicit credentials
                 client_args = {
                     'aws_access_key_id': aws_access_key,
                     'aws_secret_access_key': aws_secret_key,
                     'region_name': self.aws_region,
                     'config': config,
                 }
-
-                self.location_client = boto3.client('location', **client_args)
+                self.geo_places_client = boto3.client('geo-places', **client_args)
             else:
-                # Fall back to default credential resolution
-                self.location_client = boto3.client(
-                    'location', region_name=self.aws_region, config=config
-                )
-
-            logger.debug(f'AWS Location client initialized for region {self.aws_region}')
+                self.geo_places_client = boto3.client('geo-places', region_name=self.aws_region, config=config)
+            logger.debug(f'AWS geo-places client initialized for region {self.aws_region}')
         except Exception as e:
-            logger.error(f'Failed to initialize AWS Location client: {str(e)}')
-            self.location_client = None
+            logger.error(f'Failed to initialize AWS geo-places client: {str(e)}')
+            self.geo_places_client = None
 
-        # Get place index from environment variable or use default
-        self.default_place_index = os.environ.get('AWS_LOCATION_PLACE_INDEX', 'ExamplePlaceIndex')
-        logger.debug(f'Using place index: {self.default_place_index}')
-
-
-# Initialize the location client
-location_client = LocationClient()
-
+# Initialize the geo-places client
+geo_places_client = GeoPlacesClient()
 
 @mcp.tool()
 async def search_places(
     ctx: Context,
     query: str = Field(description='Search query (address, place name, etc.)'),
-    max_results: int = Field(
-        default=5,
-        description='Maximum number of results to return',
-        ge=1,
-        le=50,
-    ),
+    max_results: int = Field(default=5, description='Maximum number of results to return', ge=1, le=50),
+    mode: str = Field(default='summary', description="Output mode: 'summary' (default) or 'raw' for all AWS fields"),
 ) -> Dict:
-    """Search for places using AWS Location Service.
-
-    ## Usage
-
-    This tool searches for places using AWS Location Service geocoding capabilities.
-    It's useful for finding locations based on text queries like addresses, landmarks, or place names.
-
-    ## Search Tips
-
-    - Include country or region information for more accurate results
-    - For addresses, include as much detail as possible
-    - For landmarks, include the city or region name
-
-    ## Result Interpretation
-
-    The results include:
-    - query: The original search query
-    - places: A list of places matching the query, each containing:
-      - name: The formatted name/address of the place
-      - coordinates: Longitude and latitude
-      - country: Country code or name
-      - region: State/province/region
-      - municipality: City/town
-
-    Args:
-        ctx: MCP context for logging and error handling
-        query: Search query (address, place name, etc.)
-        max_results: Maximum number of results to return (1-50)
-
-    Returns:
-        Dictionary containing the search results
-    """
-    if not location_client.location_client:
-        error_msg = 'AWS Location client not initialized. Please check AWS credentials and region.'
-        logger.error(error_msg)
+    """Search for places using AWS Location Service geo-places search_text API. Geocode the query using the geocode API to get BiasPosition. If no results, try a bounding box filter. Includes contact info and opening hours if present. Output is standardized and includes all fields, even if empty or not available."""
+    if not geo_places_client.geo_places_client:
+        error_msg = 'AWS geo-places client not initialized. Please check AWS credentials and region.'
         await ctx.error(error_msg)
         return {'error': error_msg}
-
-    logger.debug(f'Searching places with query: {query}, max_results: {max_results}')
-
     try:
-        # Call AWS Location Service
-        response = location_client.location_client.search_place_index_for_text(
-            IndexName=location_client.default_place_index, Text=query, MaxResults=max_results
-        )
-
-        # Process results
-        places = []
-        for result in response.get('Results', []):
-            place = result.get('Place', {})
-
-            # Extract place details
-            place_data = {
-                'name': place.get('Label', 'Unknown'),
-                'coordinates': {
-                    'longitude': place.get('Geometry', {}).get('Point', [0, 0])[0],
-                    'latitude': place.get('Geometry', {}).get('Point', [0, 0])[1],
-                },
-                'country': place.get('Country', ''),
-                'region': place.get('Region', ''),
-                'municipality': place.get('Municipality', ''),
-            }
-            places.append(place_data)
-
-        result = {'query': query, 'places': places}
-
-        logger.debug(f'Found {len(places)} places for query: {query}')
-        return result
-
-    except botocore.exceptions.ClientError as e:
-        error_code = e.response.get('Error', {}).get('Code', '')
-        error_msg = str(e)
-
-        if error_code == 'ResourceNotFoundException' and 'place index' in error_msg.lower():
-            error_msg = 'Place index not found. Please create a place index in AWS Location Service or specify one with AWS_LOCATION_PLACE_INDEX environment variable.'
+        geo_response = geo_places_client.geo_places_client.geocode(QueryText=query)
+        geo_items = geo_response.get('ResultItems', [])
+        if geo_items:
+            geo_point = geo_items[0]['Position']
+            bias_position = geo_point
+            response = geo_places_client.geo_places_client.search_text(
+                QueryText=query,
+                MaxResults=max_results,
+                BiasPosition=bias_position,
+                AdditionalFeatures=["Contact"]
+            )
+            places = response.get('ResultItems', [])
+            if not places:
+                lon, lat = bias_position
+                bounding_box = [
+                    lon - 0.05, lat - 0.05,
+                    lon + 0.05, lat + 0.05
+                ]
+                response = geo_places_client.geo_places_client.search_text(
+                    QueryText=query,
+                    MaxResults=max_results,
+                    Filter={'BoundingBox': bounding_box},
+                    AdditionalFeatures=["Contact"]
+                )
+                places = response.get('ResultItems', [])
         else:
-            error_msg = f'AWS Location Service error: {error_msg}'
-
-        logger.error(error_msg)
-        await ctx.error(error_msg)
-        return {'error': error_msg}
-
-    except Exception as e:
-        error_msg = f'Error searching places: {str(e)}'
-        logger.error(error_msg)
-        await ctx.error(error_msg)
-        return {'error': error_msg}
-
-
-@mcp.tool()
-async def get_coordinates(
-    ctx: Context,
-    location: str = Field(description='Location name (city, address, landmark, etc.)'),
-) -> Dict:
-    """Get coordinates for a location.
-
-    ## Usage
-
-    This tool retrieves the geographical coordinates (latitude and longitude) for a specified location.
-    It's useful when you need precise location data for a specific place.
-
-    ## Location Tips
-
-    - Include country or region information for more accurate results
-    - For addresses, include as much detail as possible
-    - For landmarks, include the city or region name
-
-    ## Result Interpretation
-
-    The result includes:
-    - location: The original location query
-    - formatted_address: The formatted address of the location
-    - coordinates: Longitude and latitude
-    - country: Country code or name
-    - region: State/province/region
-    - municipality: City/town
-
-    Args:
-        ctx: MCP context for logging and error handling
-        location: Location name (city, address, landmark, etc.)
-
-    Returns:
-        Dictionary containing the location details and coordinates
-    """
-    if not location_client.location_client:
-        error_msg = 'AWS Location client not initialized. Please check AWS credentials and region.'
-        logger.error(error_msg)
-        await ctx.error(error_msg)
-        return {'error': error_msg}
-
-    logger.debug(f'Getting coordinates for location: {location}')
-
-    try:
-        # Search for the location using AWS Location Service
-        response = location_client.location_client.search_place_index_for_text(
-            IndexName=location_client.default_place_index, Text=location, MaxResults=1
-        )
-
-        if not response.get('Results') or len(response['Results']) == 0:
-            error_msg = f'No results found for location: {location}'
-            logger.error(error_msg)
+            error_msg = f'Could not geocode query "{query}" for BiasPosition.'
             await ctx.error(error_msg)
             return {'error': error_msg}
 
-        place = response['Results'][0]['Place']
-        coordinates = place['Geometry']['Point']  # [longitude, latitude]
+        def safe_list(val):
+            return val if isinstance(val, list) else ([] if val is None else [val])
 
-        result = {
-            'location': location,
-            'formatted_address': place.get('Label', ''),
-            'coordinates': {'longitude': coordinates[0], 'latitude': coordinates[1]},
-            'country': place.get('Country', ''),
-            'region': place.get('Region', ''),
-            'municipality': place.get('Municipality', ''),
-        }
+        def parse_contacts(contacts):
+            return {
+                'phones': [p['Value'] for p in contacts.get('Phones', [])] if contacts else [],
+                'websites': [w['Value'] for w in contacts.get('Websites', [])] if contacts else [],
+                'emails': [e['Value'] for e in contacts.get('Emails', [])] if contacts else [],
+                'faxes': [f['Value'] for f in contacts.get('Faxes', [])] if contacts else [],
+            }
 
-        logger.debug(f'Found coordinates for location: {location}')
+        def parse_opening_hours(result):
+            oh = result.get('OpeningHours')
+            if not oh:
+                contacts = result.get('Contacts', {})
+                oh = contacts.get('OpeningHours') if contacts else None
+            if not oh:
+                return []
+            # Normalize to list of dicts with display and components
+            if isinstance(oh, dict):
+                oh = [oh]
+            parsed = []
+            for entry in oh:
+                parsed.append({
+                    'display': entry.get('Display', []) or entry.get('display', []),
+                    'components': entry.get('Components', []) or entry.get('components', []),
+                    'open_now': entry.get('OpenNow', None),
+                    'categories': [cat.get('Name') for cat in entry.get('Categories', [])] if 'Categories' in entry else []
+                })
+            return parsed
+
+        result_places = []
+        for result in places:
+            if mode == 'raw':
+                place_data = result
+            else:
+                contacts = parse_contacts(result.get('Contacts', {}))
+                opening_hours = parse_opening_hours(result)
+                place_data = {
+                    'place_id': result.get('PlaceId', 'Not available'),
+                    'name': result.get('Title', 'Not available'),
+                    'address': result.get('Address', {}).get('Label', 'Not available'),
+                    'coordinates': {
+                        'longitude': result.get('Position', [None, None])[0],
+                        'latitude': result.get('Position', [None, None])[1],
+                    },
+                    'categories': [cat.get('Name') for cat in result.get('Categories', [])] if result.get('Categories') else [],
+                    'contacts': contacts,
+                    'opening_hours': opening_hours,
+                }
+            result_places.append(place_data)
+        result = {'query': query, 'places': result_places}
         return result
-
     except botocore.exceptions.ClientError as e:
-        error_code = e.response.get('Error', {}).get('Code', '')
-        error_msg = str(e)
-
-        if error_code == 'ResourceNotFoundException' and 'place index' in error_msg.lower():
-            error_msg = 'Place index not found. Please create a place index in AWS Location Service or specify one with AWS_LOCATION_PLACE_INDEX environment variable.'
-        else:
-            error_msg = f'AWS Location Service error: {error_msg}'
-
-        logger.error(error_msg)
+        error_msg = f'AWS geo-places Service error: {str(e)}'
+        print(error_msg)
         await ctx.error(error_msg)
         return {'error': error_msg}
-
     except Exception as e:
-        error_msg = f'Error getting coordinates: {str(e)}'
+        error_msg = f'Error searching places: {str(e)}'
+        print(error_msg)
+        await ctx.error(error_msg)
+        return {'error': error_msg}
+
+@mcp.tool()
+async def get_place(
+    ctx: Context,
+    place_id: str = Field(description='The unique PlaceId for the place'),
+    mode: str = Field(default='summary', description="Output mode: 'summary' (default) or 'raw' for all AWS fields"),
+) -> Dict:
+    """Get details for a place using AWS Location Service geo-places get_place API. Output is standardized and includes all fields, even if empty or not available."""
+    if not geo_places_client.geo_places_client:
+        error_msg = 'AWS geo-places client not initialized. Please check AWS credentials and region.'
+        await ctx.error(error_msg)
+        return {'error': error_msg}
+    try:
+        response = geo_places_client.geo_places_client.get_place(
+            PlaceId=place_id,
+            AdditionalFeatures=["Contact"]
+        )
+        if mode == 'raw':
+            return response
+        contacts = {
+            'phones': [p['Value'] for p in response.get('Contacts', {}).get('Phones', [])] if response.get('Contacts') else [],
+            'websites': [w['Value'] for w in response.get('Contacts', {}).get('Websites', [])] if response.get('Contacts') else [],
+            'emails': [e['Value'] for e in response.get('Contacts', {}).get('Emails', [])] if response.get('Contacts') else [],
+            'faxes': [f['Value'] for f in response.get('Contacts', {}).get('Faxes', [])] if response.get('Contacts') else [],
+        }
+        def parse_opening_hours(result):
+            oh = result.get('OpeningHours')
+            if not oh:
+                contacts = result.get('Contacts', {})
+                oh = contacts.get('OpeningHours') if contacts else None
+            if not oh:
+                return []
+            if isinstance(oh, dict):
+                oh = [oh]
+            parsed = []
+            for entry in oh:
+                parsed.append({
+                    'display': entry.get('Display', []) or entry.get('display', []),
+                    'components': entry.get('Components', []) or entry.get('components', []),
+                    'open_now': entry.get('OpenNow', None),
+                    'categories': [cat.get('Name') for cat in entry.get('Categories', [])] if 'Categories' in entry else []
+                })
+            return parsed
+        opening_hours = parse_opening_hours(response)
+        result = {
+            'name': response.get('Title', 'Not available'),
+            'address': response.get('Address', {}).get('Label', 'Not available'),
+            'contacts': contacts,
+            'categories': [cat.get('Name', '') for cat in response.get('Categories', [])] if response.get('Categories') else [],
+            'coordinates': {
+                'longitude': response.get('Position', [None, None])[0],
+                'latitude': response.get('Position', [None, None])[1],
+            },
+            'opening_hours': opening_hours,
+        }
+        return result
+    except Exception as e:
+        print(f"get_place error: {e}")
+        await ctx.error(f"get_place error: {e}")
+        return {'error': str(e)}
+
+@mcp.tool()
+async def reverse_geocode(
+    ctx: Context,
+    longitude: float = Field(description='Longitude of the location'),
+    latitude: float = Field(description='Latitude of the location'),
+) -> Dict:
+    """Reverse geocode coordinates to an address using AWS Location Service geo-places reverse_geocode API."""
+    if not geo_places_client.geo_places_client:
+        error_msg = 'AWS geo-places client not initialized. Please check AWS credentials and region.'
+        logger.error(error_msg)
+        await ctx.error(error_msg)
+        return {'error': error_msg}
+    logger.debug(f'Reverse geocoding for longitude: {longitude}, latitude: {latitude}')
+    try:
+        response = geo_places_client.geo_places_client.reverse_geocode(
+            QueryPosition=[longitude, latitude]
+        )
+        print(f'reverse_geocode raw response: {response}')
+        place = response.get('Place', {})
+        if not place:
+            return {'raw_response': response}
+        result = {
+            'name': place.get('Label') or place.get('Title', 'Unknown'),
+            'coordinates': {
+                'longitude': place.get('Geometry', {}).get('Point', [0, 0])[0],
+                'latitude': place.get('Geometry', {}).get('Point', [0, 0])[1],
+            },
+            'categories': [cat.get('Name') for cat in place.get('Categories', [])],
+            'address': place.get('Address', {}).get('Label', ''),
+        }
+        logger.debug(f'Reverse geocoded address for coordinates: {longitude}, {latitude}')
+        return result
+    except botocore.exceptions.ClientError as e:
+        error_msg = f'AWS geo-places Service error: {str(e)}'
+        logger.error(error_msg)
+        await ctx.error(error_msg)
+        return {'error': error_msg}
+    except Exception as e:
+        error_msg = f'Error in reverse geocoding: {str(e)}'
         logger.error(error_msg)
         await ctx.error(error_msg)
         return {'error': error_msg}
 
+@mcp.tool()
+async def search_nearby(
+    ctx: Context,
+    longitude: float = Field(description='Longitude of the center point'),
+    latitude: float = Field(description='Latitude of the center point'),
+    max_results: int = Field(default=5, description='Maximum number of results to return', ge=1, le=50),
+    query: str = Field(default=None, description='Optional search query'),
+    radius: int = Field(default=500, description='Search radius in meters', ge=1, le=50000),
+    max_radius: int = Field(default=10000, description='Maximum search radius in meters for expansion', ge=1, le=50000),
+    expansion_factor: float = Field(default=2.0, description='Factor to expand radius by if no results', ge=1.1, le=10.0),
+    mode: str = Field(default='summary', description="Output mode: 'summary' (default) or 'raw' for all AWS fields"),
+) -> Dict:
+    """Search for places near a location using AWS Location Service geo-places search_nearby API. If no results, expand the radius up to max_radius. Output is standardized and includes all fields, even if empty or not available."""
+    if not geo_places_client.geo_places_client:
+        error_msg = 'AWS geo-places client not initialized. Please check AWS credentials and region.'
+        await ctx.error(error_msg)
+        return {'error': error_msg}
+    try:
+        current_radius = radius
+        while current_radius <= max_radius:
+            params = {
+                'QueryPosition': [longitude, latitude],
+                'MaxResults': max_results,
+                'QueryRadius': int(current_radius),
+                'AdditionalFeatures': ["Contact"]
+            }
+            response = geo_places_client.geo_places_client.search_nearby(**params)
+            items = response.get('ResultItems', [])
+            results = []
+            for item in items:
+                if mode == 'raw':
+                    results.append(item)
+                else:
+                    contacts = {
+                        'phones': [p['Value'] for p in item.get('Contacts', {}).get('Phones', [])] if item.get('Contacts') else [],
+                        'websites': [w['Value'] for w in item.get('Contacts', {}).get('Websites', [])] if item.get('Contacts') else [],
+                        'emails': [e['Value'] for e in item.get('Contacts', {}).get('Emails', [])] if item.get('Contacts') else [],
+                        'faxes': [f['Value'] for f in item.get('Contacts', {}).get('Faxes', [])] if item.get('Contacts') else [],
+                    }
+                    def parse_opening_hours(result):
+                        oh = result.get('OpeningHours')
+                        if not oh:
+                            contacts = result.get('Contacts', {})
+                            oh = contacts.get('OpeningHours') if contacts else None
+                        if not oh:
+                            return []
+                        if isinstance(oh, dict):
+                            oh = [oh]
+                        parsed = []
+                        for entry in oh:
+                            parsed.append({
+                                'display': entry.get('Display', []) or entry.get('display', []),
+                                'components': entry.get('Components', []) or entry.get('components', []),
+                                'open_now': entry.get('OpenNow', None),
+                                'categories': [cat.get('Name') for cat in entry.get('Categories', [])] if 'Categories' in entry else []
+                            })
+                        return parsed
+                    opening_hours = parse_opening_hours(item)
+                    results.append({
+                        'place_id': item.get('PlaceId', 'Not available'),
+                        'name': item.get('Title', 'Not available'),
+                        'address': item.get('Address', {}).get('Label', 'Not available'),
+                        'coordinates': {
+                            'longitude': item.get('Position', [None, None])[0],
+                            'latitude': item.get('Position', [None, None])[1],
+                        },
+                        'categories': [cat.get('Name') for cat in item.get('Categories', [])] if item.get('Categories') else [],
+                        'contacts': contacts,
+                        'opening_hours': opening_hours,
+                    })
+            if results:
+                return {'places': results, 'radius_used': current_radius}
+            current_radius *= expansion_factor
+        return {'places': [], 'radius_used': current_radius / expansion_factor}
+    except Exception as e:
+        print(f"search_nearby error: {e}")
+        await ctx.error(f"search_nearby error: {e}")
+        return {'error': str(e)}
+
+@mcp.tool()
+async def search_places_open_now(
+    ctx: Context,
+    query: str = Field(description='Search query (address, place name, etc.)'),
+    max_results: int = Field(default=5, description='Maximum number of results to return', ge=1, le=50),
+    initial_radius: int = Field(default=500, description='Initial search radius in meters for expansion', ge=1, le=50000),
+    max_radius: int = Field(default=50000, description='Maximum search radius in meters for expansion', ge=1, le=50000),
+    expansion_factor: float = Field(default=2.0, description='Factor to expand radius by if no open places', ge=1.1, le=10.0),
+) -> Dict:
+    """Search for places that are open now using AWS Location Service geo-places search_text API and filter by opening hours. If no open places, expand the search radius up to max_radius. Uses BiasPosition from geocode."""
+    if not geo_places_client.geo_places_client:
+        error_msg = 'AWS geo-places client not initialized. Please check AWS credentials and region.'
+        logger.error(error_msg)
+        await ctx.error(error_msg)
+        return {'error': error_msg}
+    logger.debug(f'Searching for places open now with query: {query}, max_results: {max_results}')
+    try:
+        geo_response = geo_places_client.geo_places_client.geocode(QueryText=query)
+        geo_items = geo_response.get('ResultItems', [])
+        if not geo_items:
+            error_msg = f'Could not geocode query "{query}" for BiasPosition.'
+            logger.error(error_msg)
+            await ctx.error(error_msg)
+            return {'error': error_msg}
+        bias_position = geo_items[0]['Position']
+        current_radius = initial_radius
+        open_places = []
+        all_places = []
+        first_attempt = True
+        while current_radius <= max_radius and len(open_places) < max_results:
+            search_kwargs = {
+                'QueryText': query,
+                'MaxResults': max_results * 2,  # Fetch more to allow filtering
+                'AdditionalFeatures': ["Contact"]
+            }
+            if first_attempt:
+                # Use BiasPosition for the first (smallest) search
+                search_kwargs['BiasPosition'] = bias_position
+                first_attempt = False
+            else:
+                # Use Filter.Circle for expanded radius searches
+                search_kwargs['Filter'] = {
+                    'Circle': {
+                        'Center': bias_position,
+                        'Radius': int(current_radius)
+                    }
+                }
+            response = geo_places_client.geo_places_client.search_text(**search_kwargs)
+            result_items = response.get('ResultItems', [])
+            for idx, result in enumerate(result_items):
+                opening_hours = result.get('OpeningHours')
+                open_now = False
+                opening_hours_info = []
+                if isinstance(opening_hours, list):
+                    for oh in opening_hours:
+                        display = oh.get('Display', [])
+                        is_open = oh.get('OpenNow', False)
+                        categories = [cat.get('Name') for cat in oh.get('Categories', [])] if 'Categories' in oh else []
+                        opening_hours_info.append({
+                            'display': display,
+                            'open_now': is_open,
+                            'categories': categories
+                        })
+                        if is_open:
+                            open_now = True
+                elif isinstance(opening_hours, dict):
+                    display = opening_hours.get('Display', [])
+                    is_open = opening_hours.get('OpenNow', False)
+                    categories = [cat.get('Name') for cat in opening_hours.get('Categories', [])] if 'Categories' in opening_hours else []
+                    opening_hours_info.append({
+                        'display': display,
+                        'open_now': is_open,
+                        'categories': categories
+                    })
+                    if is_open:
+                        open_now = True
+                if not open_now and 'Contacts' in result:
+                    contacts = result['Contacts']
+                    ch = contacts.get('OpeningHours')
+                    if isinstance(ch, list):
+                        for oh in ch:
+                            if oh.get('OpenNow', False):
+                                open_now = True
+                                break
+                    elif isinstance(ch, dict):
+                        if ch.get('OpenNow', False):
+                            open_now = True
+                place_data = {
+                    'place_id': result.get('PlaceId', ''),
+                    'name': result.get('Title', 'Unknown'),
+                    'coordinates': {
+                        'longitude': result.get('Position', [0, 0])[0],
+                        'latitude': result.get('Position', [0, 0])[1],
+                    },
+                    'address': result.get('Address', {}).get('Label', ''),
+                    'country': result.get('Address', {}).get('Country', {}).get('Name', ''),
+                    'region': result.get('Address', {}).get('Region', {}).get('Name', ''),
+                    'municipality': result.get('Address', {}).get('Locality', ''),
+                    'categories': [cat.get('Name') for cat in result.get('Categories', [])],
+                    'contacts': result.get('Contacts', {}),
+                    'opening_hours': opening_hours_info,
+                    'open_now': open_now
+                }
+                all_places.append(place_data)
+                if open_now and len(open_places) < max_results:
+                    open_places.append(place_data)
+            if open_places:
+                break
+            current_radius *= expansion_factor
+        if not open_places:
+            print("search_places_open_now: No places found open now after expanding radius. Check OpeningHours and OpenNow fields above.")
+        result = {'query': query, 'open_places': open_places, 'all_places': all_places, 'radius_used': current_radius / expansion_factor}
+        logger.debug(f'Found {len(open_places)} places open now for query: {query}')
+        return result
+    except botocore.exceptions.ClientError as e:
+        error_msg = f'AWS geo-places Service error: {str(e)}'
+        logger.error(error_msg)
+        await ctx.error(error_msg)
+        return {'error': error_msg}
+    except Exception as e:
+        error_msg = f'Error searching for open places: {str(e)}'
+        logger.error(error_msg)
+        await ctx.error(error_msg)
+        return {'error': error_msg}
 
 def main():
     """Run the MCP server with CLI argument support."""
     parser = argparse.ArgumentParser(
-        description='An AWS Labs Model Context Protocol (MCP) server for AWS Location Service'
+        description='An AWS Labs Model Context Protocol (MCP) server for AWS Location Service (geo-places)'
     )
     parser.add_argument('--sse', action='store_true', help='Use SSE transport')
     parser.add_argument('--port', type=int, default=8888, help='Port to run the server on')
-
     args = parser.parse_args()
-
-    # Log startup information
-    logger.info('Starting AWS Location Service MCP Server')
-
-    # Run server with appropriate transport
+    logger.info('Starting AWS Location Service MCP Server (geo-places)')
     if args.sse:
         logger.info(f'Using SSE transport on port {args.port}')
         mcp.settings.port = args.port
@@ -324,7 +517,6 @@ def main():
     else:
         logger.info('Using standard stdio transport')
         mcp.run()
-
 
 if __name__ == '__main__':
     main()

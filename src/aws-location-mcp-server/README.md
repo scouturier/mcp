@@ -96,6 +96,51 @@ Get coordinates for a specific location.
 - Coordinates (longitude, latitude)
 - Country, region, and municipality information
 
+## Output Structure
+
+All tools that return places (e.g., search_places, search_nearby, get_place) return a standardized structure for each place:
+
+```
+{
+  "place_id": string, // Unique identifier for the place (or 'Not available')
+  "name": string,     // Name of the place (or 'Not available')
+  "address": string,  // Full address (or 'Not available')
+  "contacts": {
+    "phones": [string],    // List of phone numbers (may be empty)
+    "websites": [string],  // List of website URLs (may be empty)
+    "emails": [string],    // List of email addresses (may be empty)
+    "faxes": [string]      // List of fax numbers (may be empty)
+  },
+  "categories": [string], // List of categories (may be empty)
+  "coordinates": {
+    "longitude": float or 'Not available',
+    "latitude": float or 'Not available'
+  },
+  "opening_hours": [      // List of opening hours entries (may be empty)
+    {
+      "display": [string],    // Human-readable display strings (e.g., 'Mon-Fri: 08:00 - 17:00')
+      "components": [object], // Raw AWS components for each period (may be empty)
+      "open_now": bool or null, // True/False if currently open, or null if unknown
+      "categories": [string]  // Categories for this period (may be empty)
+    }
+  ]
+}
+```
+
+- All fields are always present. If data is missing, the field is an empty list or 'Not available'.
+- The `mode` parameter can be set to 'summary' (default, standardized output) or 'raw' (full AWS response for each place).
+- The `max_results` parameter controls the number of results returned (default 5, can be set per request).
+
+## Example Usage
+
+```
+# Search for hospitals in Boston, MA, return up to 5 results
+await search_places(ctx, query="hospital, Boston, MA", max_results=5)
+
+# Get full AWS response for a place
+await get_place(ctx, place_id="...", mode="raw")
+```
+
 ## Development
 
 ### Setup Development Environment
