@@ -5,15 +5,17 @@ A Model Context Protocol (MCP) server that provides access to AWS Location Servi
 ## Features
 
 - Search for places using geocoding
-- Get coordinates for locations
+- Get details for specific places by PlaceId
+- Reverse geocode coordinates to addresses
+- Search for places near a location
+- Search for places that are currently open
 
 ## Prerequisites
 
 Before using this MCP server, you need to:
 
 1. Have an AWS account with AWS Location Service enabled
-2. Create a Place Index in AWS Location Service (or the server will attempt to use an existing one)
-3. Configure AWS CLI with your credentials and profile
+2. Configure AWS CLI with your credentials and profile
 
 ## Installation
 
@@ -33,17 +35,22 @@ Configure the server in your MCP settings:
 ```json
 {
   "mcpServers": {
-    "awslabs.aws-location-mcp-server": {
+    "github.com/awslabs/mcp/tree/main/src/aws-location-mcp-server": {
       "command": "uvx",
       "args": ["awslabs.aws-location-mcp-server@latest"],
       "env": {
         "AWS_PROFILE": "your-aws-profile",
         "AWS_REGION": "us-east-1",
-        "FASTMCP_LOG_LEVEL": "ERROR",
-        "AWS_LOCATION_PLACE_INDEX": "your-place-index-name"
+        "FASTMCP_LOG_LEVEL": "ERROR"
       },
       "disabled": false,
-      "autoApprove": []
+      "autoApprove": [
+        "search_places",
+        "get_place",
+        "reverse_geocode",
+        "search_nearby",
+        "search_places_open_now"
+      ]
     }
   }
 }
@@ -56,17 +63,17 @@ Configure the server in your MCP settings:
 - `AWS_PROFILE`: AWS CLI profile to use for credentials
 - `AWS_REGION`: AWS region to use (default: us-east-1)
 - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`: Explicit AWS credentials (alternative to AWS_PROFILE)
-- `AWS_LOCATION_PLACE_INDEX`: Name of the AWS Location Service Place Index to use (default: ExamplePlaceIndex)
 
 ## Tools
 
 ### search_places
 
-Search for places using AWS Location Service geocoding.
+Search for places using AWS Location Service geo-places search_text API.
 
 **Parameters:**
 - `query` (required): Search query (address, place name, etc.)
 - `max_results` (optional): Maximum number of results to return (1-50, default: 5)
+- `mode` (optional): Output mode: 'summary' (default) or 'raw' for all AWS fields
 
 **Example:**
 ```json
@@ -76,25 +83,80 @@ Search for places using AWS Location Service geocoding.
 }
 ```
 
-### get_coordinates
+### get_place
 
-Get coordinates for a specific location.
+Get details for a place using AWS Location Service geo-places get_place API.
 
 **Parameters:**
-- `location` (required): Location name (city, address, landmark, etc.)
+- `place_id` (required): The unique PlaceId for the place
+- `mode` (optional): Output mode: 'summary' (default) or 'raw' for all AWS fields
 
 **Example:**
 ```json
 {
-  "location": "Quebec City, Canada"
+  "place_id": "AQAAAIAADsn1T3KdrRWeaXLeVEyjNx_JfeTsMB0TKUYrAJkOQH-9Cb-I",
+  "mode": "summary"
 }
 ```
 
-**Response includes:**
-- Location name
-- Formatted address
-- Coordinates (longitude, latitude)
-- Country, region, and municipality information
+### reverse_geocode
+
+Reverse geocode coordinates to an address using AWS Location Service geo-places reverse_geocode API.
+
+**Parameters:**
+- `longitude` (required): Longitude of the location
+- `latitude` (required): Latitude of the location
+
+**Example:**
+```json
+{
+  "longitude": -73.9857,
+  "latitude": 40.7484
+}
+```
+
+### search_nearby
+
+Search for places near a location using AWS Location Service geo-places search_nearby API.
+
+**Parameters:**
+- `longitude` (required): Longitude of the center point
+- `latitude` (required): Latitude of the center point
+- `max_results` (optional): Maximum number of results to return (1-50, default: 5)
+- `query` (optional): Optional search query
+- `radius` (optional): Search radius in meters (default: 500)
+- `max_radius` (optional): Maximum search radius in meters for expansion (default: 10000)
+- `expansion_factor` (optional): Factor to expand radius by if no results (default: 2.0)
+- `mode` (optional): Output mode: 'summary' (default) or 'raw' for all AWS fields
+
+**Example:**
+```json
+{
+  "longitude": -73.9857,
+  "latitude": 40.7484,
+  "radius": 1000,
+  "max_results": 10
+}
+```
+
+### search_places_open_now
+
+Search for places that are open now using AWS Location Service geo-places search_text API and filter by opening hours.
+
+**Parameters:**
+- `query` (required): Search query (address, place name, etc.)
+- `max_results` (optional): Maximum number of results to return (1-50, default: 5)
+- `initial_radius` (optional): Initial search radius in meters for expansion (default: 500)
+- `max_radius` (optional): Maximum search radius in meters for expansion (default: 50000)
+- `expansion_factor` (optional): Factor to expand radius by if no open places (default: 2.0)
+
+**Example:**
+```json
+{
+  "query": "restaurants, New York",
+  "max_results": 5
+}
+```
 
 ## Output Structure
 
@@ -139,6 +201,15 @@ await search_places(ctx, query="hospital, Boston, MA", max_results=5)
 
 # Get full AWS response for a place
 await get_place(ctx, place_id="...", mode="raw")
+
+# Reverse geocode coordinates
+await reverse_geocode(ctx, longitude=-73.9857, latitude=40.7484)
+
+# Search for places near a location
+await search_nearby(ctx, longitude=-73.9857, latitude=40.7484, radius=1000)
+
+# Search for restaurants that are open now
+await search_places_open_now(ctx, query="restaurants, New York")
 ```
 
 ## Development
@@ -173,12 +244,11 @@ python -m pytest tests/ -v --cov=awslabs --cov-report=term-missing
 
 ## AWS Location Service Resources
 
-This server uses the following AWS Location Service resource:
-
-**Place Index**: Used for geocoding and place search
-- Create in AWS Console: Amazon Location Service > Place indexes > Create place index
-- Recommended data provider: Esri or HERE
-- If not specified, the server will attempt to use an existing place index
+This server uses the AWS Location Service geo-places API for:
+- Geocoding (converting addresses to coordinates)
+- Reverse geocoding (converting coordinates to addresses)
+- Place search (finding places by name, category, etc.)
+- Place details (getting information about specific places)
 
 ## Security Considerations
 
