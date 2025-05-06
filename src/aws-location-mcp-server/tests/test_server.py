@@ -11,8 +11,17 @@
 """Tests for AWS Location Service MCP Server."""
 
 import pytest
-from awslabs.aws_location_server.server import search_places
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
+import botocore.exceptions
+
+# Import the functions directly to avoid Field validation issues
+from awslabs.aws_location_server.server import (
+    search_places,
+    get_place,
+    reverse_geocode,
+    GeoPlacesClient,
+    main
+)
 
 
 @pytest.mark.asyncio
@@ -27,9 +36,558 @@ async def test_search_places(mock_boto3_client, mock_context):
         mock_geo_client.geo_places_client = mock_boto3_client
         result = await search_places(mock_context, query=query, max_results=max_results)
 
-    # Verify the result (update as needed based on new API)
+    # Verify the result
     assert result['query'] == query
-    # The rest of the assertions may need to be updated based on the new output structure
+    assert 'places' in result
+
+
+@pytest.mark.asyncio
+async def test_search_places_error_no_client(mock_context):
+    """Test search_places when client is not initialized."""
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = None
+        result = await search_places(mock_context, query='Seattle')
+    
+    assert 'error' in result
+    assert 'AWS geo-places client not initialized' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_search_places_geocode_error(mock_boto3_client, mock_context):
+    """Test search_places when geocode returns no results."""
+    # Set up geocode to return empty results
+    mock_boto3_client.geocode.return_value = {'ResultItems': []}
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_places(mock_context, query='NonexistentPlace')
+    
+    assert 'error' in result
+    assert 'Could not geocode query' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_search_places_client_error(mock_boto3_client, mock_context):
+    """Test search_places when boto3 client raises an error."""
+    from botocore.exceptions import ClientError
+    
+    # Set up boto3 client to raise ClientError
+    mock_boto3_client.geocode.side_effect = ClientError(
+        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
+        'geocode'
+    )
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_places(mock_context, query='Seattle')
+    
+    assert 'error' in result
+    assert 'AWS geo-places Service error' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_search_places_general_exception(mock_boto3_client, mock_context):
+    """Test search_places when a general exception occurs."""
+    # Set up boto3 client to raise a general exception
+    mock_boto3_client.geocode.side_effect = Exception('Test general exception')
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_places(mock_context, query='Seattle')
+    
+    assert 'error' in result
+    assert 'Error searching places' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_get_place(mock_boto3_client, mock_context):
+    """Test the get_place tool."""
+    # Set up mock response
+    mock_boto3_client.get_place.return_value = {
+        'Title': 'Test Place',
+        'Address': {'Label': '123 Test St, Test City, TS'},
+        'Position': [-122.3321, 47.6062],
+        'Categories': [{'Name': 'Restaurant'}],
+        'Contacts': {
+            'Phones': [{'Value': '123-456-7890'}],
+            'Websites': [{'Value': 'https://example.com'}],
+            'Emails': [],
+            'Faxes': []
+        }
+    }
+    
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await get_place(mock_context, place_id='test-place-id')
+    
+    # Verify the result
+    assert result['name'] == 'Test Place'
+    assert result['address'] == '123 Test St, Test City, TS'
+    assert result['coordinates']['longitude'] == -122.3321
+    assert result['coordinates']['latitude'] == 47.6062
+    assert result['categories'] == ['Restaurant']
+    assert result['contacts']['phones'] == ['123-456-7890']
+    assert result['contacts']['websites'] == ['https://example.com']
+
+
+@pytest.mark.asyncio
+async def test_get_place_raw_mode(mock_boto3_client, mock_context):
+    """Test the get_place tool with raw mode."""
+    # Set up mock response
+    mock_response = {
+        'Title': 'Test Place',
+        'Address': {'Label': '123 Test St, Test City, TS'},
+        'Position': [-122.3321, 47.6062]
+    }
+    mock_boto3_client.get_place.return_value = mock_response
+    
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await get_place(mock_context, place_id='test-place-id', mode='raw')
+    
+    # Verify the raw result is returned
+    assert result == mock_response
+
+
+@pytest.mark.asyncio
+async def test_get_place_error_no_client(mock_context):
+    """Test get_place when client is not initialized."""
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = None
+        result = await get_place(mock_context, place_id='test-place-id')
+    
+    assert 'error' in result
+    assert 'AWS geo-places client not initialized' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_get_place_exception(mock_boto3_client, mock_context):
+    """Test get_place when an exception occurs."""
+    # Set up boto3 client to raise an exception
+    mock_boto3_client.get_place.side_effect = Exception('Test exception')
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await get_place(mock_context, place_id='test-place-id')
+    
+    assert 'error' in result
+    assert 'Test exception' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode(mock_boto3_client, mock_context):
+    """Test the reverse_geocode tool."""
+    # Set up mock response
+    mock_boto3_client.reverse_geocode.return_value = {
+        'Place': {
+            'Label': '123 Test St, Test City, TS',
+            'Title': 'Test Place',
+            'Geometry': {'Point': [-122.3321, 47.6062]},
+            'Categories': [{'Name': 'Restaurant'}],
+            'Address': {'Label': '123 Test St, Test City, TS'}
+        }
+    }
+    
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await reverse_geocode(mock_context, longitude=-122.3321, latitude=47.6062)
+    
+    # Verify the result
+    assert result['name'] == '123 Test St, Test City, TS'
+    assert result['address'] == '123 Test St, Test City, TS'
+    assert result['coordinates']['longitude'] == -122.3321
+    assert result['coordinates']['latitude'] == 47.6062
+    assert result['categories'] == ['Restaurant']
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_no_place(mock_boto3_client, mock_context):
+    """Test reverse_geocode when no place is found."""
+    # Set up mock response with no Place
+    mock_boto3_client.reverse_geocode.return_value = {'SomeOtherField': 'value'}
+    
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await reverse_geocode(mock_context, longitude=-122.3321, latitude=47.6062)
+    
+    # Verify the raw response is returned
+    assert 'raw_response' in result
+    assert result['raw_response'] == {'SomeOtherField': 'value'}
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_error_no_client(mock_context):
+    """Test reverse_geocode when client is not initialized."""
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = None
+        result = await reverse_geocode(mock_context, longitude=-122.3321, latitude=47.6062)
+    
+    assert 'error' in result
+    assert 'AWS geo-places client not initialized' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_client_error(mock_boto3_client, mock_context):
+    """Test reverse_geocode when boto3 client raises a ClientError."""
+    from botocore.exceptions import ClientError
+    
+    # Set up boto3 client to raise ClientError
+    mock_boto3_client.reverse_geocode.side_effect = ClientError(
+        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
+        'reverse_geocode'
+    )
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await reverse_geocode(mock_context, longitude=-122.3321, latitude=47.6062)
+    
+    assert 'error' in result
+    assert 'AWS geo-places Service error' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_general_exception(mock_boto3_client, mock_context):
+    """Test reverse_geocode when a general exception occurs."""
+    # Set up boto3 client to raise a general exception
+    mock_boto3_client.reverse_geocode.side_effect = Exception('Test general exception')
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await reverse_geocode(mock_context, longitude=-122.3321, latitude=47.6062)
+    
+    assert 'error' in result
+    assert 'Error in reverse geocoding' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_search_nearby(mock_boto3_client, mock_context):
+    """Test the search_nearby tool."""
+    # Set up mock response
+    mock_boto3_client.search_nearby.return_value = {
+        'ResultItems': [
+            {
+                'PlaceId': 'test-place-id',
+                'Title': 'Test Place',
+                'Address': {'Label': '123 Test St, Test City, TS'},
+                'Position': [-122.3321, 47.6062],
+                'Categories': [{'Name': 'Restaurant'}],
+                'Contacts': {
+                    'Phones': [{'Value': '123-456-7890'}],
+                    'Websites': [{'Value': 'https://example.com'}],
+                    'Emails': [],
+                    'Faxes': []
+                }
+            }
+        ]
+    }
+    
+    # Import the function directly to avoid Field validation issues
+    from awslabs.aws_location_server.server import search_nearby as search_nearby_func
+    
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_nearby_func(
+            mock_context, 
+            longitude=-122.3321, 
+            latitude=47.6062,
+            radius=500,
+            max_results=5,
+            max_radius=10000,
+            expansion_factor=2.0,
+            mode='summary'
+        )
+    
+    # Verify the result
+    assert 'places' in result
+    assert len(result['places']) == 1
+    assert result['places'][0]['name'] == 'Test Place'
+    assert result['places'][0]['address'] == '123 Test St, Test City, TS'
+    assert result['places'][0]['coordinates']['longitude'] == -122.3321
+    assert result['places'][0]['coordinates']['latitude'] == 47.6062
+    assert result['places'][0]['categories'] == ['Restaurant']
+    assert result['places'][0]['contacts']['phones'] == ['123-456-7890']
+    assert result['places'][0]['contacts']['websites'] == ['https://example.com']
+    assert 'radius_used' in result
+
+
+@pytest.mark.asyncio
+async def test_search_nearby_raw_mode(mock_boto3_client, mock_context):
+    """Test the search_nearby tool with raw mode."""
+    # Set up mock response
+    mock_boto3_client.search_nearby.return_value = {
+        'ResultItems': [
+            {
+                'PlaceId': 'test-place-id',
+                'Title': 'Test Place',
+                'Address': {'Label': '123 Test St, Test City, TS'},
+                'Position': [-122.3321, 47.6062]
+            }
+        ]
+    }
+    
+    # Import the function directly to avoid Field validation issues
+    from awslabs.aws_location_server.server import search_nearby as search_nearby_func
+    
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_nearby_func(
+            mock_context, 
+            longitude=-122.3321, 
+            latitude=47.6062,
+            radius=500,
+            max_results=5,
+            max_radius=10000,
+            expansion_factor=2.0,
+            mode='raw'
+        )
+    
+    # Verify the raw result is returned
+    assert 'places' in result
+    assert len(result['places']) == 1
+    assert result['places'][0]['PlaceId'] == 'test-place-id'
+    assert result['places'][0]['Title'] == 'Test Place'
+
+
+@pytest.mark.asyncio
+async def test_search_nearby_no_results_expansion(mock_boto3_client, mock_context):
+    """Test search_nearby with radius expansion when no results are found."""
+    # Set up mock response to return empty results first, then results on second call
+    mock_boto3_client.search_nearby.side_effect = [
+        {'ResultItems': []},  # First call with initial radius
+        {  # Second call with expanded radius
+            'ResultItems': [
+                {
+                    'PlaceId': 'test-place-id',
+                    'Title': 'Test Place',
+                    'Address': {'Label': '123 Test St, Test City, TS'},
+                    'Position': [-122.3321, 47.6062]
+                }
+            ]
+        }
+    ]
+    
+    # Import the function directly to avoid Field validation issues
+    from awslabs.aws_location_server.server import search_nearby as search_nearby_func
+    
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_nearby_func(
+            mock_context, 
+            longitude=-122.3321, 
+            latitude=47.6062,
+            radius=500,
+            max_radius=2000,
+            expansion_factor=2.0,
+            max_results=5,
+            mode='summary'
+        )
+    
+    # Verify the result with expanded radius
+    assert 'places' in result
+    assert len(result['places']) == 1
+    assert result['radius_used'] == 1000  # 500 * 2.0
+
+
+@pytest.mark.asyncio
+async def test_search_nearby_error_no_client(mock_context):
+    """Test search_nearby when client is not initialized."""
+    # Import the function directly to avoid Field validation issues
+    from awslabs.aws_location_server.server import search_nearby as search_nearby_func
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = None
+        result = await search_nearby_func(
+            mock_context, 
+            longitude=-122.3321, 
+            latitude=47.6062,
+            radius=500,
+            max_results=5,
+            max_radius=10000,
+            expansion_factor=2.0,
+            mode='summary'
+        )
+    
+    assert 'error' in result
+    assert 'AWS geo-places client not initialized' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_search_nearby_exception(mock_boto3_client, mock_context):
+    """Test search_nearby when an exception occurs."""
+    # Set up boto3 client to raise an exception
+    mock_boto3_client.search_nearby.side_effect = Exception('Test exception')
+    
+    # Import the function directly to avoid Field validation issues
+    from awslabs.aws_location_server.server import search_nearby as search_nearby_func
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_nearby_func(
+            mock_context, 
+            longitude=-122.3321, 
+            latitude=47.6062,
+            radius=500,
+            max_results=5,
+            max_radius=10000,
+            expansion_factor=2.0,
+            mode='summary'
+        )
+    
+    assert 'error' in result
+    assert 'Test exception' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_search_places_open_now(mock_boto3_client, mock_context):
+    """Test the search_places_open_now tool."""
+    # Set up mock responses
+    mock_boto3_client.geocode.return_value = {
+        'ResultItems': [{'Position': [-122.3321, 47.6062]}]
+    }
+    mock_boto3_client.search_text.return_value = {
+        'ResultItems': [
+            {
+                'PlaceId': 'test-place-id',
+                'Title': 'Test Place',
+                'Address': {'Label': '123 Test St, Test City, TS', 'Country': {'Name': 'USA'}, 'Region': {'Name': 'WA'}, 'Locality': 'Seattle'},
+                'Position': [-122.3321, 47.6062],
+                'Categories': [{'Name': 'Restaurant'}],
+                'Contacts': {
+                    'Phones': [{'Value': '123-456-7890'}],
+                    'OpeningHours': {'Display': ['Mon-Fri: 9AM-5PM'], 'OpenNow': True}
+                }
+            }
+        ]
+    }
+    
+    # Import the function directly to avoid Field validation issues
+    from awslabs.aws_location_server.server import search_places_open_now as search_places_open_now_func
+    
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_places_open_now_func(
+            mock_context, 
+            query='restaurants Seattle',
+            max_results=5,
+            initial_radius=500,
+            max_radius=50000,
+            expansion_factor=2.0
+        )
+    
+    # Verify the result
+    assert 'query' in result
+    assert 'open_places' in result
+    assert len(result['open_places']) == 1
+    assert result['open_places'][0]['name'] == 'Test Place'
+    assert result['open_places'][0]['open_now'] is True
+    assert 'all_places' in result
+    assert 'radius_used' in result
+
+
+@pytest.mark.asyncio
+async def test_search_places_open_now_no_geocode_results(mock_boto3_client, mock_context):
+    """Test search_places_open_now when geocode returns no results."""
+    # Set up geocode to return empty results
+    mock_boto3_client.geocode.return_value = {'ResultItems': []}
+    
+    # Import the function directly to avoid Field validation issues
+    from awslabs.aws_location_server.server import search_places_open_now as search_places_open_now_func
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_places_open_now_func(
+            mock_context, 
+            query='NonexistentPlace',
+            max_results=5,
+            initial_radius=500,
+            max_radius=50000,
+            expansion_factor=2.0
+        )
+    
+    assert 'error' in result
+    assert 'Could not geocode query' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_search_places_open_now_error_no_client(mock_context):
+    """Test search_places_open_now when client is not initialized."""
+    # Import the function directly to avoid Field validation issues
+    from awslabs.aws_location_server.server import search_places_open_now as search_places_open_now_func
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = None
+        result = await search_places_open_now_func(
+            mock_context, 
+            query='restaurants Seattle',
+            max_results=5,
+            initial_radius=500,
+            max_radius=50000,
+            expansion_factor=2.0
+        )
+    
+    assert 'error' in result
+    assert 'AWS geo-places client not initialized' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_search_places_open_now_client_error(mock_boto3_client, mock_context):
+    """Test search_places_open_now when boto3 client raises a ClientError."""
+    from botocore.exceptions import ClientError
+    
+    # Set up boto3 client to raise ClientError
+    mock_boto3_client.geocode.side_effect = ClientError(
+        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
+        'geocode'
+    )
+    
+    # Import the function directly to avoid Field validation issues
+    from awslabs.aws_location_server.server import search_places_open_now as search_places_open_now_func
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_places_open_now_func(
+            mock_context, 
+            query='restaurants Seattle',
+            max_results=5,
+            initial_radius=500,
+            max_radius=50000,
+            expansion_factor=2.0
+        )
+    
+    assert 'error' in result
+    assert 'AWS geo-places Service error' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_search_places_open_now_general_exception(mock_boto3_client, mock_context):
+    """Test search_places_open_now when a general exception occurs."""
+    # Set up boto3 client to raise a general exception
+    mock_boto3_client.geocode.side_effect = Exception('Test general exception')
+    
+    # Import the function directly to avoid Field validation issues
+    from awslabs.aws_location_server.server import search_places_open_now as search_places_open_now_func
+    
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_places_open_now_func(
+            mock_context, 
+            query='restaurants Seattle',
+            max_results=5,
+            initial_radius=500,
+            max_radius=50000,
+            expansion_factor=2.0
+        )
+    
+    assert 'error' in result
+    assert 'Error searching for open places' in result['error']
 
 
 def test_geo_places_client_initialization(monkeypatch):
@@ -37,10 +595,53 @@ def test_geo_places_client_initialization(monkeypatch):
     # NOTE: No AWS credentials are set or required for this test. All AWS calls are mocked.
     monkeypatch.setenv('AWS_REGION', 'us-west-2')
     with patch('boto3.client') as mock_boto3_client:
-        from awslabs.aws_location_server.server import GeoPlacesClient
-
-        GeoPlacesClient()
+        client = GeoPlacesClient()
         mock_boto3_client.assert_called_once()
         args, kwargs = mock_boto3_client.call_args
         assert args[0] == 'geo-places'
         assert kwargs['region_name'] == 'us-west-2'
+
+
+def test_geo_places_client_initialization_with_credentials(monkeypatch):
+    """Test the GeoPlacesClient initialization with explicit credentials."""
+    monkeypatch.setenv('AWS_REGION', 'us-west-2')
+    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'test-access-key')
+    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'test-secret-key')
+    
+    with patch('boto3.client') as mock_boto3_client:
+        client = GeoPlacesClient()
+        mock_boto3_client.assert_called_once()
+        args, kwargs = mock_boto3_client.call_args
+        assert args[0] == 'geo-places'
+        assert kwargs['region_name'] == 'us-west-2'
+        assert kwargs['aws_access_key_id'] == 'test-access-key'
+        assert kwargs['aws_secret_access_key'] == 'test-secret-key'
+
+
+def test_geo_places_client_initialization_exception():
+    """Test the GeoPlacesClient initialization when an exception occurs."""
+    with patch('boto3.client', side_effect=Exception('Test exception')):
+        client = GeoPlacesClient()
+        assert client.geo_places_client is None
+
+
+def test_main_stdio():
+    """Test the main function with stdio transport."""
+    with patch('awslabs.aws_location_server.server.mcp.run') as mock_run:
+        with patch('argparse.ArgumentParser.parse_args') as mock_parse_args:
+            mock_parse_args.return_value = MagicMock(sse=False, port=8888)
+            main()
+            mock_run.assert_called_once()
+            args, kwargs = mock_run.call_args
+            assert kwargs.get('transport') is None
+
+
+def test_main_sse():
+    """Test the main function with SSE transport."""
+    with patch('awslabs.aws_location_server.server.mcp.run') as mock_run:
+        with patch('argparse.ArgumentParser.parse_args') as mock_parse_args:
+            mock_parse_args.return_value = MagicMock(sse=True, port=9999)
+            main()
+            mock_run.assert_called_once()
+            args, kwargs = mock_run.call_args
+            assert kwargs.get('transport') == 'sse'
