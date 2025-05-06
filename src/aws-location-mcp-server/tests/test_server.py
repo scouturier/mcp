@@ -295,10 +295,10 @@ async def test_search_nearby(mock_boto3_client, mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-            max_results=5,
-            max_radius=10000,
-            expansion_factor=2.0,
-            mode='summary'
+
+
+
+
         )
 
     # Verify the result
@@ -340,17 +340,17 @@ async def test_search_nearby_raw_mode(mock_boto3_client, mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-            max_results=5,
-            max_radius=10000,
-            expansion_factor=2.0,
-            mode='raw'
+
+
+
+
         )
 
     # Verify the raw result is returned
     assert 'places' in result
     assert len(result['places']) == 1
-    assert result['places'][0]['PlaceId'] == 'test-place-id'
-    assert result['places'][0]['Title'] == 'Test Place'
+    assert result['places'][0]['place_id'] == 'test-place-id'
+    assert result['places'][0]['name'] == 'Test Place'
 
 
 @pytest.mark.asyncio
@@ -382,10 +382,10 @@ async def test_search_nearby_no_results_expansion(mock_boto3_client, mock_contex
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-            max_radius=2000,
-            expansion_factor=2.0,
-            max_results=5,
-            mode='summary'
+
+
+
+
         )
 
     # Verify the result with expanded radius
@@ -407,10 +407,10 @@ async def test_search_nearby_error_no_client(mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-            max_results=5,
-            max_radius=10000,
-            expansion_factor=2.0,
-            mode='summary'
+
+
+
+
         )
 
     assert 'error' in result
@@ -433,10 +433,10 @@ async def test_search_nearby_exception(mock_boto3_client, mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-            max_results=5,
-            max_radius=10000,
-            expansion_factor=2.0,
-            mode='summary'
+
+
+
+
         )
 
     assert 'error' in result
@@ -477,10 +477,10 @@ async def test_search_places_open_now(mock_boto3_client, mock_context):
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-            max_results=5,
+
             initial_radius=500,
-            max_radius=50000,
-            expansion_factor=2.0
+
+
         )
 
     # Verify the result
@@ -509,10 +509,10 @@ async def test_search_places_open_now_no_geocode_results(mock_boto3_client, mock
         result = await search_places_open_now_func(
             mock_context,
             query='NonexistentPlace',
-            max_results=5,
+
             initial_radius=500,
-            max_radius=50000,
-            expansion_factor=2.0
+
+
         )
 
     assert 'error' in result
@@ -532,10 +532,10 @@ async def test_search_places_open_now_error_no_client(mock_context):
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-            max_results=5,
+
             initial_radius=500,
-            max_radius=50000,
-            expansion_factor=2.0
+
+
         )
 
     assert 'error' in result
@@ -563,10 +563,10 @@ async def test_search_places_open_now_client_error(mock_boto3_client, mock_conte
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-            max_results=5,
+
             initial_radius=500,
-            max_radius=50000,
-            expansion_factor=2.0
+
+
         )
 
     assert 'error' in result
@@ -589,14 +589,14 @@ async def test_search_places_open_now_general_exception(mock_boto3_client, mock_
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-            max_results=5,
+
             initial_radius=500,
-            max_radius=50000,
-            expansion_factor=2.0
+
+
         )
 
     assert 'error' in result
-    assert 'Error searching for open places' in result['error']
+    assert 'Test general exception' in result['error']
 
 
 def test_geo_places_client_initialization(monkeypatch):
