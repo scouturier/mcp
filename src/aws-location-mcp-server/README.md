@@ -112,8 +112,8 @@ reverse_geocode(longitude: float, latitude: float) -> dict
 Search for places near a specific location with optional radius expansion.
 
 ```python
-search_nearby(longitude: float, latitude: float, radius: int = 500, max_results: int = 5, 
-              query: str = None, max_radius: int = 10000, expansion_factor: float = 2.0, 
+search_nearby(longitude: float, latitude: float, radius: int = 500, max_results: int = 5,
+              query: str = None, max_radius: int = 10000, expansion_factor: float = 2.0,
               mode: str = 'summary') -> dict
 ```
 
@@ -122,7 +122,7 @@ search_nearby(longitude: float, latitude: float, radius: int = 500, max_results:
 Search for places that are currently open, with radius expansion if needed.
 
 ```python
-search_places_open_now(query: str, max_results: int = 5, initial_radius: int = 500, 
+search_places_open_now(query: str, max_results: int = 5, initial_radius: int = 500,
                        max_radius: int = 50000, expansion_factor: float = 2.0) -> dict
 ```
 
