@@ -45,19 +45,19 @@ def log_place(place):
         if 'address' in place:
             # Address could contain PII, so we'll just log that it exists
             logger.info('Address: [Address information available]')
-        
+
         # Log categories as they're generally not sensitive
         if 'categories' in place and place.get('categories'):
             logger.info(f'Categories: {", ".join(place.get("categories", []))}')
-        
+
         # Log that coordinates exist but not their values
         if 'coordinates' in place and place.get('coordinates'):
             logger.info('Coordinates: [Coordinate information available]')
-        
+
         # Log that contact info exists but not the actual values
         if 'contacts' in place and place.get('contacts'):
             logger.info('Contact information: [Available]')
-        
+
         logger.info('-')
 
 
@@ -166,7 +166,7 @@ async def main():
     if not places:
         logger.info('No places found in search_places.')
         return
-    
+
     logger.info(f'Found {len(places)} places')
     for place in places:
         log_place(place)
@@ -176,11 +176,13 @@ async def main():
     place_id = first_place.get('place_id', '')
     # Don't log the actual place_id as it could be considered sensitive
     has_place_id = bool(place_id)
-    
+
     # Store coordinates for testing but don't log them
     longitude = first_place.get('coordinates', {}).get('longitude', None)
     latitude = first_place.get('coordinates', {}).get('latitude', None)
-    has_coordinates = longitude is not None and latitude is not None and longitude != 0 and latitude != 0
+    has_coordinates = (
+        longitude is not None and latitude is not None and longitude != 0 and latitude != 0
+    )
 
     logger.info('\n=== get_place ===')
     if has_place_id:
@@ -244,10 +246,12 @@ async def main():
             # Don't log the actual address
             logger.info('Address: [Address information available]')
             logger.info(f'Open Now: {place.get("open_now")}')
-            
+
             # Log opening hours without specific details
             if place.get('opening_hours'):
-                logger.info(f'Opening Hours: [Available - {len(place.get("opening_hours"))} entries]')
+                logger.info(
+                    f'Opening Hours: [Available - {len(place.get("opening_hours"))} entries]'
+                )
             logger.info('-')
 
     logger.info('\n=== search_places_open_now (7-Eleven, New York, with radius expansion) ===')
@@ -269,10 +273,12 @@ async def main():
             # Don't log the actual address
             logger.info('Address: [Address information available]')
             logger.info(f'Open Now: {place.get("open_now")}')
-            
+
             # Log opening hours without specific details
             if place.get('opening_hours'):
-                logger.info(f'Opening Hours: [Available - {len(place.get("opening_hours"))} entries]')
+                logger.info(
+                    f'Opening Hours: [Available - {len(place.get("opening_hours"))} entries]'
+                )
             logger.info('-')
 
     logger.info('\n=== search_places_open_now (mall, Princeton, NJ, with radius expansion) ===')
@@ -294,10 +300,12 @@ async def main():
             # Don't log the actual address
             logger.info('Address: [Address information available]')
             logger.info(f'Open Now: {place.get("open_now")}')
-            
+
             # Log opening hours without specific details
             if place.get('opening_hours'):
-                logger.info(f'Opening Hours: [Available - {len(place.get("opening_hours"))} entries]')
+                logger.info(
+                    f'Opening Hours: [Available - {len(place.get("opening_hours"))} entries]'
+                )
             logger.info('-')
 
     logger.info('\n=== search_places (mall, Princeton, NJ, with operating hours) ===')
