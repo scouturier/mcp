@@ -1,6 +1,7 @@
 import asyncio
-import os
 import logging
+import os
+
 from awslabs.aws_location_server.server import (
     get_place,
     reverse_geocode,
