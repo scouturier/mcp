@@ -182,6 +182,34 @@ A server for AWS Terraform best practices.
 
 [Learn more](src/terraform-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/terraform-mcp-server/)
 
+### AWS Location Service MCP Server
+
+[![PyPI version](https://img.shields.io/pypi/v/awslabs.aws-location-mcp-server.svg)](https://pypi.org/project/awslabs.aws-location-mcp-server/)
+
+A server for accessing AWS Location Service capabilities, focusing on place search and geographical coordinates.
+
+- Search for places using geocoding
+- Get details for specific places by PlaceId
+- Reverse geocode coordinates to addresses
+- Search for places near a location
+- Search for places that are currently open
+
+[Learn more](src/aws-location-mcp-server/README.md)
+
+### AWS Location Service MCP Server
+
+[![PyPI version](https://img.shields.io/pypi/v/awslabs.aws-location-mcp-server.svg)](https://pypi.org/project/awslabs.aws-location-mcp-server/)
+
+A server for accessing AWS Location Service capabilities, focusing on place search and geographical coordinates.
+
+- Search for places using geocoding
+- Get details for specific places by PlaceId
+- Reverse geocode coordinates to addresses
+- Search for places near a location
+- Search for places that are currently open
+
+[Learn more](src/aws-location-mcp-server/README.md)
+
 ### Use Cases for the Servers
 
 For example, you can use the **AWS Documentation MCP Server** to help your AI assistant research and generate up-to-date code for any AWS service, like Amazon Bedrock Inline agents. Alternatively, you could use the **CDK MCP Server** or the **Terraform MCP Server** to have your AI assistant create infrastructure-as-code implementations that use the latest APIs and follow AWS best practices. With the **Cost Analysis MCP Server**, you could ask "What would be the estimated monthly cost for this CDK project before I deploy it?" or "Can you help me understand the potential AWS service expenses for this infrastructure design?" and receive detailed cost estimations and budget planning insights.
@@ -266,6 +294,17 @@ Example configuration for Amazon Q CLI MCP (`~/.aws/amazonq/mcp.json`):
        "command": "uvx",
        "args": ["awslabs.terraform-mcp-server@latest"],
        "env": {
+         "FASTMCP_LOG_LEVEL": "ERROR"
+       },
+       "disabled": false,
+       "autoApprove": []
+     },
+    "awslabs.aws-location-mcp-server": {
+       "command": "uvx",
+       "args": ["awslabs.aws-location-mcp-server@latest"],
+       "env": {
+         "AWS_PROFILE": "your-aws-profile",
+         "AWS_REGION": "us-east-1",
          "FASTMCP_LOG_LEVEL": "ERROR"
        },
        "disabled": false,

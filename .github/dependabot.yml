@@ -14,45 +14,38 @@ updates:
       prefix: "chore(deps): update github-actions"
     groups:
       github-actions-version-updates:
-        applies-to: version-updates
         patterns:
           - "*"
 
-  - package-ecosystem: "uv"
-    directories:
-      - "**/*"
+  - package-ecosystem: "pip"
+    directory: "/"
     schedule:
       interval: "weekly"
     commit-message:
-      prefix: "chore(deps): update uv"
+      prefix: "chore(deps): update python dependencies"
     groups:
-      uv-version-updates:
-        applies-to: version-updates
+      python-version-updates:
         patterns:
           - "*"
 
   - package-ecosystem: "npm"
-    directories:
-      - "**/*"
+    directory: "/"
     schedule:
       interval: "weekly"
     commit-message:
-      prefix: "chore(deps): update npm"
+      prefix: "chore(deps): update npm dependencies"
     groups:
       npm-version-updates:
-        applies-to: version-updates
         patterns:
           - "*"
 
   - package-ecosystem: "docker"
-    directories:
-      - "**/*"
+    directory: "/"
     schedule:
       interval: "weekly"
     commit-message:
       prefix: "chore(deps): update docker images"
     groups:
       docker-version-updates:
-        applies-to: version-updates
         patterns:
           - "*"
