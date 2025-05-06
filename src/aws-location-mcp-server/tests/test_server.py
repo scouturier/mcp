@@ -627,7 +627,7 @@ async def test_search_places_with_bounding_box(mock_boto3_client, mock_context):
     """Test search_places with bounding box filter when initial search returns no results."""
     # Set up mock responses
     mock_boto3_client.geocode.return_value = {'ResultItems': [{'Position': [-122.3321, 47.6062]}]}
-    
+
     # First search_text call returns empty results, second call with bounding box returns results
     mock_boto3_client.search_text.side_effect = [
         {'ResultItems': []},  # First call returns empty
@@ -737,7 +737,7 @@ async def test_search_places_open_now_with_expanded_radius(mock_boto3_client, mo
     """Test search_places_open_now with radius expansion."""
     # Set up mock responses
     mock_boto3_client.geocode.return_value = {'ResultItems': [{'Position': [-122.3321, 47.6062]}]}
-    
+
     # First search returns no open places, second search with expanded radius returns open places
     mock_boto3_client.search_text.side_effect = [
         {  # First call returns places but none are open
