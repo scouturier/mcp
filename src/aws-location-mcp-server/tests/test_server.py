@@ -614,8 +614,8 @@ def test_geo_places_client_initialization(monkeypatch):
 def test_geo_places_client_initialization_with_credentials(monkeypatch):
     """Test the GeoPlacesClient initialization with explicit credentials."""
     monkeypatch.setenv('AWS_REGION', 'us-west-2')
-    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'test-access-key')
-    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'test-secret-key')
+    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'test-access-key')  # pragma: allowlist secret
+    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'test-secret-key')  # pragma: allowlist secret
 
     with patch('boto3.client') as mock_boto3_client:
         _ = GeoPlacesClient()
