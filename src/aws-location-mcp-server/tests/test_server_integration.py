@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-
 from awslabs.aws_location_server.server import (
     get_place,
     reverse_geocode,
@@ -12,6 +11,7 @@ from awslabs.aws_location_server.server import (
     optimize_waypoints,
 )
 from mcp.server.fastmcp import Context
+
 
 # Set up a logger instead of using print for sensitive data
 logger = logging.getLogger("integration_tests")
