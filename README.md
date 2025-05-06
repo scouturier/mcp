@@ -21,6 +21,7 @@ A suite of specialized MCP servers that help you get the most out of AWS, wherev
   - [AWS Diagram MCP Server](#aws-diagram-mcp-server)
   - [AWS Lambda MCP Server](#aws-lambda-mcp-server)
   - [AWS Terraform MCP Server](#aws-terraform-mcp-server)
+  - [AWS Location Service MCP Server](#aws-location-mcp-server)
   - [Use Cases for the Servers](#use-cases-for-the-servers)
 - [Installation and Setup](#installation-and-setup)
   - [Getting Started with Cline and Amazon Bedrock](#getting-started-with-cline-and-amazon-bedrock)
@@ -181,20 +182,6 @@ A server for AWS Terraform best practices.
 - Terraform Workflow Execution
 
 [Learn more](src/terraform-mcp-server/README.md) | [Documentation](https://awslabs.github.io/mcp/servers/terraform-mcp-server/)
-
-### AWS Location Service MCP Server
-
-[![PyPI version](https://img.shields.io/pypi/v/awslabs.aws-location-mcp-server.svg)](https://pypi.org/project/awslabs.aws-location-mcp-server/)
-
-A server for accessing AWS Location Service capabilities, focusing on place search and geographical coordinates.
-
-- Search for places using geocoding
-- Get details for specific places by PlaceId
-- Reverse geocode coordinates to addresses
-- Search for places near a location
-- Search for places that are currently open
-
-[Learn more](src/aws-location-mcp-server/README.md)
 
 ### AWS Location Service MCP Server
 
