@@ -72,8 +72,7 @@ async def test_search_places_client_error(mock_boto3_client, mock_context):
 
     # Set up boto3 client to raise ClientError
     mock_boto3_client.geocode.side_effect = ClientError(
-        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
-        'geocode'
+        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}}, 'geocode'
     )
 
     with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
@@ -111,8 +110,8 @@ async def test_get_place(mock_boto3_client, mock_context):
             'Phones': [{'Value': '123-456-7890'}],
             'Websites': [{'Value': 'https://example.com'}],
             'Emails': [],
-            'Faxes': []
-        }
+            'Faxes': [],
+        },
     }
 
     # Patch the geo_places_client in the server module
@@ -137,7 +136,7 @@ async def test_get_place_raw_mode(mock_boto3_client, mock_context):
     mock_response = {
         'Title': 'Test Place',
         'Address': {'Label': '123 Test St, Test City, TS'},
-        'Position': [-122.3321, 47.6062]
+        'Position': [-122.3321, 47.6062],
     }
     mock_boto3_client.get_place.return_value = mock_response
 
@@ -185,7 +184,7 @@ async def test_reverse_geocode(mock_boto3_client, mock_context):
             'Title': 'Test Place',
             'Geometry': {'Point': [-122.3321, 47.6062]},
             'Categories': [{'Name': 'Restaurant'}],
-            'Address': {'Label': '123 Test St, Test City, TS'}
+            'Address': {'Label': '123 Test St, Test City, TS'},
         }
     }
 
@@ -236,8 +235,7 @@ async def test_reverse_geocode_client_error(mock_boto3_client, mock_context):
 
     # Set up boto3 client to raise ClientError
     mock_boto3_client.reverse_geocode.side_effect = ClientError(
-        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
-        'reverse_geocode'
+        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}}, 'reverse_geocode'
     )
 
     with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
@@ -278,8 +276,8 @@ async def test_search_nearby(mock_boto3_client, mock_context):
                     'Phones': [{'Value': '123-456-7890'}],
                     'Websites': [{'Value': 'https://example.com'}],
                     'Emails': [],
-                    'Faxes': []
-                }
+                    'Faxes': [],
+                },
             }
         ]
     }
@@ -295,10 +293,6 @@ async def test_search_nearby(mock_boto3_client, mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-
-
-
-
         )
 
     # Verify the result
@@ -324,7 +318,7 @@ async def test_search_nearby_raw_mode(mock_boto3_client, mock_context):
                 'PlaceId': 'test-place-id',
                 'Title': 'Test Place',
                 'Address': {'Label': '123 Test St, Test City, TS'},
-                'Position': [-122.3321, 47.6062]
+                'Position': [-122.3321, 47.6062],
             }
         ]
     }
@@ -340,10 +334,6 @@ async def test_search_nearby_raw_mode(mock_boto3_client, mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-
-
-
-
         )
 
     # Verify the raw result is returned
@@ -365,10 +355,10 @@ async def test_search_nearby_no_results_expansion(mock_boto3_client, mock_contex
                     'PlaceId': 'test-place-id',
                     'Title': 'Test Place',
                     'Address': {'Label': '123 Test St, Test City, TS'},
-                    'Position': [-122.3321, 47.6062]
+                    'Position': [-122.3321, 47.6062],
                 }
             ]
-        }
+        },
     ]
 
     # Import the function directly to avoid Field validation issues
@@ -382,10 +372,6 @@ async def test_search_nearby_no_results_expansion(mock_boto3_client, mock_contex
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-
-
-
-
         )
 
     # Verify the result with expanded radius
@@ -407,10 +393,6 @@ async def test_search_nearby_error_no_client(mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-
-
-
-
         )
 
     assert 'error' in result
@@ -433,10 +415,6 @@ async def test_search_nearby_exception(mock_boto3_client, mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-
-
-
-
         )
 
     assert 'error' in result
@@ -447,21 +425,24 @@ async def test_search_nearby_exception(mock_boto3_client, mock_context):
 async def test_search_places_open_now(mock_boto3_client, mock_context):
     """Test the search_places_open_now tool."""
     # Set up mock responses
-    mock_boto3_client.geocode.return_value = {
-        'ResultItems': [{'Position': [-122.3321, 47.6062]}]
-    }
+    mock_boto3_client.geocode.return_value = {'ResultItems': [{'Position': [-122.3321, 47.6062]}]}
     mock_boto3_client.search_text.return_value = {
         'ResultItems': [
             {
                 'PlaceId': 'test-place-id',
                 'Title': 'Test Place',
-                'Address': {'Label': '123 Test St, Test City, TS', 'Country': {'Name': 'USA'}, 'Region': {'Name': 'WA'}, 'Locality': 'Seattle'},
+                'Address': {
+                    'Label': '123 Test St, Test City, TS',
+                    'Country': {'Name': 'USA'},
+                    'Region': {'Name': 'WA'},
+                    'Locality': 'Seattle',
+                },
                 'Position': [-122.3321, 47.6062],
                 'Categories': [{'Name': 'Restaurant'}],
                 'Contacts': {
                     'Phones': [{'Value': '123-456-7890'}],
-                    'OpeningHours': {'Display': ['Mon-Fri: 9AM-5PM'], 'OpenNow': True}
-                }
+                    'OpeningHours': {'Display': ['Mon-Fri: 9AM-5PM'], 'OpenNow': True},
+                },
             }
         ]
     }
@@ -477,10 +458,7 @@ async def test_search_places_open_now(mock_boto3_client, mock_context):
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-
             initial_radius=500,
-
-
         )
 
     # Verify the result
@@ -509,10 +487,7 @@ async def test_search_places_open_now_no_geocode_results(mock_boto3_client, mock
         result = await search_places_open_now_func(
             mock_context,
             query='NonexistentPlace',
-
             initial_radius=500,
-
-
         )
 
     assert 'error' in result
@@ -532,10 +507,7 @@ async def test_search_places_open_now_error_no_client(mock_context):
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-
             initial_radius=500,
-
-
         )
 
     assert 'error' in result
@@ -549,8 +521,7 @@ async def test_search_places_open_now_client_error(mock_boto3_client, mock_conte
 
     # Set up boto3 client to raise ClientError
     mock_boto3_client.geocode.side_effect = ClientError(
-        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
-        'geocode'
+        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}}, 'geocode'
     )
 
     # Import the function directly to avoid Field validation issues
@@ -563,10 +534,7 @@ async def test_search_places_open_now_client_error(mock_boto3_client, mock_conte
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-
             initial_radius=500,
-
-
         )
 
     assert 'error' in result
@@ -589,10 +557,7 @@ async def test_search_places_open_now_general_exception(mock_boto3_client, mock_
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-
             initial_radius=500,
-
-
         )
 
     assert 'error' in result
