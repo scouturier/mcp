@@ -346,23 +346,20 @@ async def search_nearby(
     ctx: Context,
     longitude: float = Field(description='Longitude of the center point'),
     latitude: float = Field(description='Latitude of the center point'),
-    max_results: int = Field(
-        default=5, description='Maximum number of results to return', ge=1, le=50
-    ),
     query: str = Field(default=None, description='Optional search query'),
     radius: int = Field(default=500, description='Search radius in meters', ge=1, le=50000),
-    max_radius: int = Field(
-        default=10000, description='Maximum search radius in meters for expansion', ge=1, le=50000
-    ),
-    expansion_factor: float = Field(
-        default=2.0, description='Factor to expand radius by if no results', ge=1.1, le=10.0
-    ),
-    mode: str = Field(
-        default='summary',
-        description="Output mode: 'summary' (default) or 'raw' for all AWS fields",
-    ),
 ) -> Dict:
     """Search for places near a location using AWS Location Service geo-places search_nearby API. If no results, expand the radius up to max_radius. Output is standardized and includes all fields, even if empty or not available."""
+    # Moved from parameters to local variables
+    max_results = 5  # Maximum number of results to return
+    max_radius = 10000  # Maximum search radius in meters for expansion
+    expansion_factor = 2.0  # Factor to expand radius by if no results
+    mode = 'summary'  # Output mode: 'summary' (default) or 'raw' for all AWS fields
+    # Descriptions:
+    # max_results: Maximum number of results to return (default=5, ge=1, le=50)
+    # max_radius: Maximum search radius in meters for expansion (default=10000, ge=1, le=50000)
+    # expansion_factor: Factor to expand radius by if no results (default=2.0, ge=1.1, le=10.0)
+    # mode: Output mode: 'summary' (default) or 'raw' for all AWS fields
     if not geo_places_client.geo_places_client:
         error_msg = (
             'AWS geo-places client not initialized. Please check AWS credentials and region.'
@@ -460,20 +457,19 @@ async def search_nearby(
 async def search_places_open_now(
     ctx: Context,
     query: str = Field(description='Search query (address, place name, etc.)'),
-    max_results: int = Field(
-        default=5, description='Maximum number of results to return', ge=1, le=50
-    ),
     initial_radius: int = Field(
         default=500, description='Initial search radius in meters for expansion', ge=1, le=50000
     ),
-    max_radius: int = Field(
-        default=50000, description='Maximum search radius in meters for expansion', ge=1, le=50000
-    ),
-    expansion_factor: float = Field(
-        default=2.0, description='Factor to expand radius by if no open places', ge=1.1, le=10.0
-    ),
 ) -> Dict:
     """Search for places that are open now using AWS Location Service geo-places search_text API and filter by opening hours. If no open places, expand the search radius up to max_radius. Uses BiasPosition from geocode."""
+    # Moved from parameters to local variables
+    max_results = 5  # Maximum number of results to return
+    max_radius = 50000  # Maximum search radius in meters for expansion
+    expansion_factor = 2.0  # Factor to expand radius by if no open places
+    # Descriptions:
+    # max_results: Maximum number of results to return (default=5, ge=1, le=50)
+    # max_radius: Maximum search radius in meters for expansion (default=50000, ge=1, le=50000)
+    # expansion_factor: Factor to expand radius by if no open places (default=2.0, ge=1.1, le=10.0)
     if not geo_places_client.geo_places_client:
         error_msg = (
             'AWS geo-places client not initialized. Please check AWS credentials and region.'
@@ -597,7 +593,7 @@ async def search_places_open_now(
         error_msg = f'Error searching for open places: {str(e)}'
         logger.error(error_msg)
         await ctx.error(error_msg)
-        return {'error': error_msg}
+        return {'error': str(e)}
 
 
 def main():
