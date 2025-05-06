@@ -13,7 +13,7 @@ from mcp.server.fastmcp import Context
 class DummyContext(Context):
     """Dummy context for testing."""
 
-    async def error(self, code=None, message=None, **kwargs):
+    async def error(self, message=None, **extra):
         """Handle error messages for DummyContext."""
         print(f'[ERROR] {message}')
 
