@@ -13,9 +13,9 @@ from mcp.server.fastmcp import Context
 class DummyContext(Context):
     """Dummy context for testing."""
 
-    async def error(self, msg):
+    async def error(self, code=None, message=None, **kwargs):
         """Handle error messages for DummyContext."""
-        print(f'[ERROR] {msg}')
+        print(f'[ERROR] {message}')
 
 
 def print_place(place):
@@ -48,7 +48,7 @@ async def main():
         print('AWS_REGION not set.')
         return
 
-    ctx = DummyContext()
+    ctx = DummyContext(_request_context=None, _fastmcp=None)
 
     print('\n=== search_places (POI query) ===')
     search_result = await search_places(ctx, query='Starbucks, Seattle', max_results=3)

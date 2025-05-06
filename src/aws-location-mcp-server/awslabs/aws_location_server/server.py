@@ -8,6 +8,8 @@
 # or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 # OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 # and limitations under the License.
+
+from typing import Dict, List, Optional
 """AWS Location Service MCP Server implementation using geo-places client only."""
 
 import argparse
@@ -349,7 +351,7 @@ async def search_nearby(
     max_results: int = Field(
         default=5, description='Maximum number of results to return', ge=1, le=50
     ),
-    query: str = Field(default=None, description='Optional search query'),
+    query: Optional[str] = Field(default=None, description='Optional search query'),
     radius: int = Field(default=500, description='Search radius in meters', ge=1, le=50000),
     max_radius: int = Field(
         default=10000, description='Maximum search radius in meters for expansion', ge=1, le=50000
