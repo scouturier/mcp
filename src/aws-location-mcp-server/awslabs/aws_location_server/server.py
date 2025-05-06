@@ -9,7 +9,6 @@
 # OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 # and limitations under the License.
 
-from typing import Dict, List, Optional
 """AWS Location Service MCP Server implementation using geo-places client only."""
 
 import argparse
@@ -21,7 +20,7 @@ import sys
 from loguru import logger
 from mcp.server.fastmcp import Context, FastMCP
 from pydantic import Field
-from typing import Dict
+from typing import Dict, Optional
 
 
 # Set up logging
