@@ -32,4 +32,4 @@ if [ $RESULT -eq 0 ]; then
   echo "Integration tests completed successfully."
 else
   echo "Integration tests failed with exit code $RESULT."
-fi 
+fi
