@@ -12,6 +12,7 @@
 """AWS Location Service MCP Server implementation using geo-places client only."""
 
 import argparse
+import asyncio
 import boto3
 import botocore.config
 import botocore.exceptions
@@ -93,8 +94,42 @@ class GeoPlacesClient:
             self.geo_places_client = None
 
 
+class GeoRoutesClient:
+    """AWS Location Service geo-routes client wrapper."""
+
+    def __init__(self):
+        """Initialize the AWS geo-routes client."""
+        self.aws_region = os.environ.get('AWS_REGION', 'us-east-1')
+        self.geo_routes_client = None
+        config = botocore.config.Config(
+            connect_timeout=15, read_timeout=15, retries={'max_attempts': 3}
+        )
+        aws_access_key = os.environ.get('AWS_ACCESS_KEY_ID')
+        aws_secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
+        try:
+            if aws_access_key and aws_secret_key:
+                client_args = {
+                    'aws_access_key_id': aws_access_key,
+                    'aws_secret_access_key': aws_secret_key,
+                    'region_name': self.aws_region,
+                    'config': config,
+                }
+                self.geo_routes_client = boto3.client('geo-routes', **client_args)
+            else:
+                self.geo_routes_client = boto3.client(
+                    'geo-routes', region_name=self.aws_region, config=config
+                )
+            logger.debug(f'AWS geo-routes client initialized for region {self.aws_region}')
+        except Exception as e:
+            logger.error(f'Failed to initialize AWS geo-routes client: {str(e)}')
+            self.geo_routes_client = None
+
+
 # Initialize the geo-places client
 geo_places_client = GeoPlacesClient()
+
+# Initialize the geo-routes client
+geo_routes_client = GeoRoutesClient()
 
 
 @mcp.tool()
@@ -597,6 +632,129 @@ async def search_places_open_now(
         error_msg = f'Error searching for open places: {str(e)}'
         logger.error(error_msg)
         await ctx.error(error_msg)
+        return {'error': str(e)}
+
+
+@mcp.tool()
+async def calculate_route(
+    ctx: Context,
+    departure_position: list = Field(description='Departure position as [longitude, latitude]'),
+    destination_position: list = Field(
+        description='Destination position as [longitude, latitude]'
+    ),
+    travel_mode: str = Field(
+        default='Car',
+        description="Travel mode: 'Car', 'Truck', 'Walking', or 'Bicycle' (default: 'Car')",
+    ),
+    optimize_for: str = Field(
+        default='FastestRoute',
+        description="Optimize route for 'FastestRoute' or 'ShortestRoute' (default: 'FastestRoute')",
+    ),
+) -> dict:
+    """Calculate a route and return summary info and turn-by-turn directions.
+
+    Parameters:
+        departure_position: [lon, lat]
+        destination_position: [lon, lat]
+        travel_mode: 'Car', 'Truck', 'Walking', or 'Bicycle' (default: 'Car')
+        optimize_for: 'FastestRoute' or 'ShortestRoute' (default: 'FastestRoute')
+
+    Returns:
+        dict with distance, duration, and turn_by_turn directions (list of step summaries)
+    """
+    include_leg_geometry = False
+    mode = 'summary'
+    client = GeoRoutesClient().geo_routes_client
+    params = {
+        'Origin': departure_position,
+        'Destination': destination_position,
+        'TravelMode': travel_mode,
+        'TravelStepType': 'TurnByTurn',
+        'OptimizeRoutingFor': optimize_for,
+    }
+    if include_leg_geometry:
+        params['LegGeometryFormat'] = 'FlexiblePolyline'
+    try:
+        response = await asyncio.to_thread(client.calculate_routes, **params)
+        if mode == 'raw':
+            return response
+        routes = response.get('Routes', [])
+        if not routes:
+            return {'error': 'No route found'}
+        route = routes[0]
+        distance_meters = route.get('Distance', None)
+        duration_seconds = route.get('DurationSeconds', None)
+        turn_by_turn = []
+        for leg in route.get('Legs', []):
+            vehicle_leg_details = leg.get('VehicleLegDetails', {})
+            for step in vehicle_leg_details.get('TravelSteps', []):
+                step_summary = {
+                    'distance_meters': step.get('Distance'),
+                    'duration_seconds': step.get('Duration'),
+                    'type': step.get('Type'),
+                    'road_name': step.get('NextRoad', {}).get('RoadName')
+                    if step.get('NextRoad')
+                    else None,
+                }
+                turn_by_turn.append(step_summary)
+        return {
+            'distance_meters': distance_meters,
+            'duration_seconds': duration_seconds,
+            'turn_by_turn': turn_by_turn,
+        }
+    except Exception as e:
+        return {'error': str(e)}
+
+
+@mcp.tool()
+async def optimize_waypoints(
+    ctx: Context,
+    origin_position: list = Field(description='Origin position as [longitude, latitude]'),
+    destination_position: list = Field(
+        description='Destination position as [longitude, latitude]'
+    ),
+    waypoints: list = Field(
+        description='List of intermediate waypoints, each as a dict with at least Position [longitude, latitude], optionally Id'
+    ),
+    travel_mode: str = Field(
+        default='Car',
+        description="Travel mode: 'Car', 'Truck', 'Walking', or 'Bicycle' (default: 'Car')",
+    ),
+    mode: str = Field(
+        default='summary',
+        description="Output mode: 'summary' (default) or 'raw' for all AWS fields",
+    ),
+) -> Dict:
+    """Optimize the order of waypoints using AWS Location Service geo-routes optimize_waypoints API (V2).
+
+    Returns summary (optimized order, total distance, duration, etc.) or full response if mode='raw'.
+    """
+    client = GeoRoutesClient().geo_routes_client
+    params = {
+        'Origin': origin_position,
+        'Destination': destination_position,
+        'Waypoints': [{'Position': wp['Position']} for wp in waypoints],
+        'TravelMode': travel_mode,
+    }
+    try:
+        response = await asyncio.to_thread(client.optimize_waypoints, **params)
+        if mode == 'raw':
+            return response
+        routes = response.get('Routes', [])
+        if not routes:
+            return {'error': 'No route found'}
+        route = routes[0]
+        distance_meters = route.get('Distance', None)
+        duration_seconds = route.get('DurationSeconds', None)
+        optimized_order = [wp.get('Position') for wp in route.get('Waypoints', [])]
+        return {
+            'distance_meters': distance_meters,
+            'duration_seconds': duration_seconds,
+            'optimized_order': optimized_order,
+        }
+    except Exception as e:
+        # import traceback
+        # return {'error': str(e), 'traceback': traceback.format_exc()}
         return {'error': str(e)}
 
 

@@ -2,7 +2,9 @@ import asyncio
 import logging
 import os
 from awslabs.aws_location_server.server import (
+    calculate_route,
     get_place,
+    optimize_waypoints,
     reverse_geocode,
     search_nearby,
     search_places,
@@ -27,6 +29,10 @@ class DummyContext(Context):
     async def error(self, message=None, **extra):
         """Handle error messages for DummyContext."""
         logger.error(message)
+
+    async def run_in_threadpool(self, func, *args, **kwargs):
+        """Run a function in a threadpool."""
+        return func(*args, **kwargs)
 
 
 def log_place(place):
@@ -54,6 +60,95 @@ def log_place(place):
             logger.info('Contact information: [Available]')
 
         logger.info('-')
+
+
+async def test_calculate_route_princeton_to_columbus(ctx):
+    """Test route calculation between Princeton, NJ and Columbus, OH."""
+    logger.info('\n=== calculate_route (Princeton, NJ to Columbus, OH) ===')
+    departure = [-74.66446, 40.36076]  # Princeton, NJ
+    destination = [-83.00275, 39.96199]  # Columbus, OH
+    route_result = await calculate_route(
+        ctx,
+        departure_position=departure,
+        destination_position=destination,
+        travel_mode='Car',
+        optimize_for='FastestRoute',
+    )
+    if 'error' in route_result:
+        logger.info(f'calculate_route error: {route_result["error"]}')
+        if 'traceback' in route_result:
+            logger.info(f'Traceback: {route_result["traceback"]}')
+    else:
+        logger.info(f'Route distance: {route_result.get("distance_meters")}')
+        logger.info(f'Route duration: {route_result.get("duration_seconds")}')
+        logger.info(f'Legs: {route_result.get("legs")}')
+        turn_by_turn = route_result.get('turn_by_turn', [])
+        if turn_by_turn:
+            logger.info(f'Turn-by-turn directions ({len(turn_by_turn)} steps):')
+            for i, step in enumerate(turn_by_turn[:10]):
+                logger.info(f'Step {i + 1}: {step}')
+        else:
+            logger.warning('No turn-by-turn directions found in route result!')
+
+
+async def test_calculate_route_and_optimize_waypoints(ctx):
+    """Test route calculation and waypoint optimization between Seattle, Bellevue, and Redmond."""
+    logger.info('\n=== calculate_route ===')
+    # Example: Seattle to Bellevue
+    departure = [-122.335167, 47.608013]  # Seattle
+    destination = [-122.200676, 47.610149]  # Bellevue
+    route_result = await calculate_route(
+        ctx,
+        departure_position=departure,
+        destination_position=destination,
+        travel_mode='Car',
+        optimize_for='FastestRoute',
+    )
+    if 'error' in route_result:
+        logger.info(f'calculate_route error: {route_result["error"]}')
+        if 'traceback' in route_result:
+            logger.info(f'Traceback: {route_result["traceback"]}')
+    else:
+        logger.info(f'Route distance: {route_result.get("distance_meters")}')
+        logger.info(f'Route duration: {route_result.get("duration_seconds")}')
+        logger.info(f'Legs: {route_result.get("legs")}')
+        turn_by_turn = route_result.get('turn_by_turn', [])
+        if turn_by_turn:
+            logger.info(f'Turn-by-turn directions ({len(turn_by_turn)} steps):')
+            for i, step in enumerate(turn_by_turn[:10]):
+                logger.info(f'Step {i + 1}: {step}')
+        else:
+            logger.warning('No turn-by-turn directions found in route result!')
+        # New: Check steps in each leg
+        for leg_idx, leg in enumerate(route_result.get('legs', [])):
+            steps = leg.get('steps', [])
+            logger.info(f'Leg {leg_idx + 1} has {len(steps)} steps.')
+            for step in steps[:3]:  # Show first 3 steps for brevity
+                logger.info(f'  Step: {step.get("instruction")}')
+
+    logger.info('\n=== optimize_waypoints ===')
+    # Example: Seattle (origin), Bellevue (waypoint), Redmond (destination)
+    origin = [-122.335167, 47.608013]  # Seattle
+    waypoint = {'Id': 'bellevue', 'Position': [-122.200676, 47.610149]}
+    destination = [-122.121513, 47.673988]  # Redmond
+    optimize_result = await optimize_waypoints(
+        ctx,
+        origin_position=origin,
+        destination_position=destination,
+        waypoints=[waypoint],
+        travel_mode='Car',
+        mode='summary',
+    )
+    if 'error' in optimize_result:
+        logger.info(f'optimize_waypoints error: {optimize_result["error"]}')
+    else:
+        logger.info(f'Optimized order: {optimize_result.get("optimized_order")}')
+        logger.info(f'Total distance: {optimize_result.get("total_distance_meters")} meters')
+        logger.info(f'Total duration: {optimize_result.get("total_duration_seconds")} seconds')
+        for wp in optimize_result.get('waypoints', []):
+            logger.info(
+                f'Waypoint: {wp["id"]} at {wp["position"]} (Arrival: {wp["arrival_time"]}, Departure: {wp["departure_time"]})'
+            )
 
 
 async def main():
@@ -123,8 +218,6 @@ async def main():
             latitude=latitude,
             max_results=3,
             radius=10,
-            max_radius=2000,
-            expansion_factor=2.0,
         )
         nearby_places = search_nearby_result.get('places', [])
         radius_used = search_nearby_result.get('radius_used', None)
@@ -141,9 +234,7 @@ async def main():
 
     logger.info('\n=== search_places_open_now (with radius expansion) ===')
     query = 'Starbucks, Seattle'
-    open_now_result = await search_places_open_now(
-        ctx, query=query, max_results=3, initial_radius=10, max_radius=2000, expansion_factor=2.0
-    )
+    open_now_result = await search_places_open_now(ctx, query=query, initial_radius=10)
     logger.info(f'Query: {query}')
     open_places = open_now_result.get('open_places', [])
     radius_used = open_now_result.get('radius_used', None)
@@ -169,10 +260,7 @@ async def main():
     open_now_result_7e = await search_places_open_now(
         ctx,
         query=query_7e,
-        max_results=3,
         initial_radius=10,
-        max_radius=2000,
-        expansion_factor=2.0,
     )
     logger.info(f'Query: {query_7e}')
     open_places_7e = open_now_result_7e.get('open_places', [])
@@ -199,10 +287,7 @@ async def main():
     open_now_result_mall = await search_places_open_now(
         ctx,
         query=query_mall,
-        max_results=3,
         initial_radius=10,
-        max_radius=2000,
-        expansion_factor=2.0,
     )
     logger.info(f'Query: {query_mall}')
     open_places_mall = open_now_result_mall.get('open_places', [])
@@ -256,6 +341,8 @@ async def main():
             logger.info(f'{len(places)} places found:')
             for place in places:
                 log_place(place)
+    await test_calculate_route_and_optimize_waypoints(ctx)
+    await test_calculate_route_princeton_to_columbus(ctx)
 
     logger.info('Integration tests completed successfully.')
 

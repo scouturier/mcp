@@ -15,8 +15,11 @@ import pytest
 # Import the functions directly to avoid Field validation issues
 from awslabs.aws_location_server.server import (
     GeoPlacesClient,
+    GeoRoutesClient,
+    calculate_route,
     get_place,
     main,
+    optimize_waypoints,
     reverse_geocode,
     search_places,
     search_places_open_now,
@@ -577,27 +580,194 @@ def test_geo_places_client_initialization(monkeypatch):
         assert kwargs['region_name'] == 'us-west-2'
 
 
-def test_geo_places_client_initialization_with_credentials(monkeypatch):
-    """Test the GeoPlacesClient initialization with explicit credentials."""
+@pytest.mark.asyncio
+async def test_calculate_route(mock_boto3_client, mock_context):
+    """Test the calculate_route tool."""
+    # Set up mock response
+    mock_response = {
+        'Routes': [
+            {
+                'Distance': 100.0,
+                'DurationSeconds': 300,
+                'Legs': [
+                    {
+                        'Distance': 100.0,
+                        'DurationSeconds': 300,
+                        'VehicleLegDetails': {
+                            'TravelSteps': [
+                                {
+                                    'Distance': 50.0,
+                                    'Duration': 150,
+                                    'StartPosition': [-122.335167, 47.608013],
+                                    'EndPosition': [-122.300000, 47.600000],
+                                    'Type': 'Straight',
+                                    'NextRoad': {'RoadName': 'Test Road'},
+                                },
+                                {
+                                    'Distance': 50.0,
+                                    'Duration': 150,
+                                    'StartPosition': [-122.300000, 47.600000],
+                                    'EndPosition': [-122.200676, 47.610149],
+                                    'Type': 'Turn',
+                                    'NextRoad': {'RoadName': 'Another Road'},
+                                },
+                            ]
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+
+    # Create a mock for the calculate_route function
+    with patch('awslabs.aws_location_server.server.GeoRoutesClient') as mock_geo_client:
+        # Set up the mock to return our mock_boto3_client
+        mock_geo_client.return_value.geo_routes_client = mock_boto3_client
+
+        # Mock the asyncio.to_thread function to return the mock response directly
+        with patch('asyncio.to_thread', return_value=mock_response):
+            # Call the function
+            result = await calculate_route(
+                mock_context,
+                departure_position=[-122.335167, 47.608013],
+                destination_position=[-122.200676, 47.610149],
+                travel_mode='Car',
+                optimize_for='FastestRoute',
+            )
+
+    # Verify the result
+    assert 'distance_meters' in result
+    assert 'duration_seconds' in result
+    assert 'turn_by_turn' in result
+    assert len(result['turn_by_turn']) == 2
+    assert result['turn_by_turn'][0]['road_name'] == 'Test Road'
+    assert result['turn_by_turn'][1]['road_name'] == 'Another Road'
+
+
+@pytest.mark.asyncio
+async def test_calculate_route_error(mock_boto3_client, mock_context):
+    """Test the calculate_route tool when an error occurs."""
+    # Set up boto3 client to raise ClientError
+    mock_boto3_client.calculate_routes.side_effect = Exception('Test error')
+
+    # Patch the geo_routes_client in the server module
+    with patch('awslabs.aws_location_server.server.GeoRoutesClient') as mock_geo_client:
+        mock_geo_client.return_value.geo_routes_client = mock_boto3_client
+
+        # Mock asyncio.to_thread to propagate the exception
+        with patch('asyncio.to_thread', side_effect=Exception('Test error')):
+            result = await calculate_route(
+                mock_context,
+                departure_position=[-122.335167, 47.608013],
+                destination_position=[-122.200676, 47.610149],
+                travel_mode='Car',
+                optimize_for='FastestRoute',
+            )
+
+    # Verify the result
+    assert 'error' in result
+    assert 'Test error' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_optimize_waypoints(mock_boto3_client, mock_context):
+    """Test the optimize_waypoints tool."""
+    # Set up mock response
+    mock_boto3_client.optimize_waypoints.return_value = {
+        'Routes': [
+            {
+                'Distance': 150.0,
+                'DurationSeconds': 450,
+                'Waypoints': [
+                    {'Position': [-122.200676, 47.610149]},
+                ],
+            }
+        ],
+    }
+
+    # Patch the geo_routes_client in the server module
+    with patch('awslabs.aws_location_server.server.GeoRoutesClient') as mock_geo_client:
+        mock_geo_client.return_value.geo_routes_client = mock_boto3_client
+
+        # Mock asyncio.to_thread to return the mock response directly
+        with patch(
+            'asyncio.to_thread', return_value=mock_boto3_client.optimize_waypoints.return_value
+        ):
+            result = await optimize_waypoints(
+                mock_context,
+                origin_position=[-122.335167, 47.608013],
+                destination_position=[-122.121513, 47.673988],
+                waypoints=[{'Position': [-122.200676, 47.610149]}],
+                travel_mode='Car',
+                mode='summary',
+            )
+
+    # Verify the result
+    assert 'distance_meters' in result
+    assert 'duration_seconds' in result
+    assert 'optimized_order' in result
+    assert len(result['optimized_order']) == 1
+
+
+@pytest.mark.asyncio
+async def test_optimize_waypoints_error(mock_boto3_client, mock_context):
+    """Test the optimize_waypoints tool when an error occurs."""
+    # Set up boto3 client to raise Exception
+    mock_boto3_client.optimize_waypoints.side_effect = Exception('Test error')
+
+    # Patch the geo_routes_client in the server module
+    with patch('awslabs.aws_location_server.server.GeoRoutesClient') as mock_geo_client:
+        mock_geo_client.return_value.geo_routes_client = mock_boto3_client
+
+        # Mock asyncio.to_thread to propagate the exception
+        with patch('asyncio.to_thread', side_effect=Exception('Test error')):
+            result = await optimize_waypoints(
+                mock_context,
+                origin_position=[-122.335167, 47.608013],
+                destination_position=[-122.121513, 47.673988],
+                waypoints=[{'Position': [-122.200676, 47.610149]}],
+                travel_mode='Car',
+                mode='summary',
+            )
+
+    # Verify the result
+    assert 'error' in result
+    assert 'Test error' in result['error']
+
+
+def test_geo_routes_client_initialization(monkeypatch):
+    """Test the GeoRoutesClient initialization."""
+    monkeypatch.setenv('AWS_REGION', 'us-west-2')
+
+    with patch('boto3.client') as mock_boto3_client:
+        _ = GeoRoutesClient()
+        mock_boto3_client.assert_called_once()
+        args, kwargs = mock_boto3_client.call_args
+        assert args[0] == 'geo-routes'
+        assert kwargs['region_name'] == 'us-west-2'
+
+
+def test_geo_routes_client_initialization_with_credentials(monkeypatch):
+    """Test the GeoRoutesClient initialization with explicit credentials."""
     monkeypatch.setenv('AWS_REGION', 'us-west-2')
     monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'test-access-key')  # pragma: allowlist secret
     monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'test-secret-key')  # pragma: allowlist secret
 
     with patch('boto3.client') as mock_boto3_client:
-        _ = GeoPlacesClient()
+        _ = GeoRoutesClient()
         mock_boto3_client.assert_called_once()
         args, kwargs = mock_boto3_client.call_args
-        assert args[0] == 'geo-places'
+        assert args[0] == 'geo-routes'
         assert kwargs['region_name'] == 'us-west-2'
         assert kwargs['aws_access_key_id'] == 'test-access-key'
         assert kwargs['aws_secret_access_key'] == 'test-secret-key'
 
 
-def test_geo_places_client_initialization_exception():
-    """Test the GeoPlacesClient initialization when an exception occurs."""
+def test_geo_routes_client_initialization_exception():
+    """Test the GeoRoutesClient initialization when an exception occurs."""
     with patch('boto3.client', side_effect=Exception('Test exception')):
-        geo_client = GeoPlacesClient()
-        assert geo_client.geo_places_client is None
+        geo_client = GeoRoutesClient()
+        assert geo_client.geo_routes_client is None
 
 
 def test_main_stdio():
@@ -781,3 +951,26 @@ async def test_search_places_open_now_with_expanded_radius(mock_boto3_client, mo
     assert result['open_places'][0]['name'] == 'Test Place 2'
     assert result['open_places'][0]['open_now'] is True
     assert result['radius_used'] == 500.0  # Initial radius
+
+
+def test_geo_places_client_initialization_with_credentials(monkeypatch):
+    """Test the GeoPlacesClient initialization with explicit credentials."""
+    monkeypatch.setenv('AWS_REGION', 'us-west-2')
+    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'test-access-key')  # pragma: allowlist secret
+    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'test-secret-key')  # pragma: allowlist secret
+
+    with patch('boto3.client') as mock_boto3_client:
+        _ = GeoPlacesClient()
+        mock_boto3_client.assert_called_once()
+        args, kwargs = mock_boto3_client.call_args
+        assert args[0] == 'geo-places'
+        assert kwargs['region_name'] == 'us-west-2'
+        assert kwargs['aws_access_key_id'] == 'test-access-key'
+        assert kwargs['aws_secret_access_key'] == 'test-secret-key'
+
+
+def test_geo_places_client_initialization_exception():
+    """Test the GeoPlacesClient initialization when an exception occurs."""
+    with patch('boto3.client', side_effect=Exception('Test exception')):
+        geo_client = GeoPlacesClient()
+        assert geo_client.geo_places_client is None

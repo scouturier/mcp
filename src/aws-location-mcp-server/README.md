@@ -11,6 +11,8 @@ This MCP server provides tools to access AWS Location Service capabilities, focu
 - **Reverse Geocode**: Convert coordinates to addresses
 - **Search Nearby**: Search for places near a specified location
 - **Open Now Search**: Search for places that are currently open
+- **Route Calculation**: Calculate routes between locations using AWS Location Service
+- **Optimize Waypoints**: Optimize the order of waypoints for a route using AWS Location Service
 
 ## Prerequisites
 
@@ -126,6 +128,27 @@ search_places_open_now(query: str, max_results: int = 5, initial_radius: int = 5
                        max_radius: int = 50000, expansion_factor: float = 2.0) -> dict
 ```
 
+### calculate_route
+
+Calculate a route between two locations using AWS Location Service.
+
+```python
+calculate_route(
+    departure_position: list,  # [longitude, latitude]
+    destination_position: list,  # [longitude, latitude]
+    travel_mode: str = 'Car',  # 'Car', 'Truck', 'Walking', or 'Bicycle'
+    optimize_for: str = 'FastestRoute'  # 'FastestRoute' or 'ShortestRoute'
+) -> dict
+```
+Returns route geometry, distance, duration, and turn-by-turn directions.
+
+- `departure_position`: List of [longitude, latitude] for the starting point.
+- `destination_position`: List of [longitude, latitude] for the destination.
+- `travel_mode`: Travel mode, one of `'Car'`, `'Truck'`, `'Walking'`, or `'Bicycle'`.
+- `optimize_for`: Route optimization, either `'FastestRoute'` or `'ShortestRoute'`.
+
+See [AWS documentation](https://docs.aws.amazon.com/location/latest/developerguide/calculate-routes-custom-avoidance-shortest.html) for more details.
+
 ### get_coordinates
 
 Get coordinates for a location name or address.
@@ -134,13 +157,29 @@ Get coordinates for a location name or address.
 get_coordinates(location: str) -> dict
 ```
 
+### optimize_waypoints
+
+Optimize the order of waypoints using AWS Location Service geo-routes API.
+
+```python
+optimize_waypoints(
+    origin_position: list,  # [longitude, latitude]
+    destination_position: list,  # [longitude, latitude]
+    waypoints: list,  # List of waypoints, each as a dict with at least Position [longitude, latitude]
+    travel_mode: str = 'Car',
+    mode: str = 'summary'
+) -> dict
+```
+Returns the optimized order of waypoints, total distance, and duration.
+
 ## AWS Location Service Resources
 
-This server uses the AWS Location Service geo-places API for:
+This server uses the AWS Location Service geo-places and route calculation APIs for:
 - Geocoding (converting addresses to coordinates)
 - Reverse geocoding (converting coordinates to addresses)
 - Place search (finding places by name, category, etc.)
 - Place details (getting information about specific places)
+- **Route calculation (finding routes between locations)**
 
 ## Security Considerations
 
