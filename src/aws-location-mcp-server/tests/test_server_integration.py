@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import pytest
 from awslabs.aws_location_server.server import (
     calculate_route,
     get_place,
@@ -62,6 +63,17 @@ def log_place(place):
         logger.info('-')
 
 
+@pytest.fixture
+def ctx():
+    """Create a dummy context for testing."""
+    return DummyContext(_request_context=None, _fastmcp=None)
+
+
+@pytest.mark.skipif(
+    not (os.environ.get('AWS_ACCESS_KEY_ID') or os.environ.get('AWS_PROFILE')),
+    reason='AWS credentials not set',
+)
+@pytest.mark.asyncio
 async def test_calculate_route_princeton_to_columbus(ctx):
     """Test route calculation between Princeton, NJ and Columbus, OH."""
     logger.info('\n=== calculate_route (Princeton, NJ to Columbus, OH) ===')
@@ -91,6 +103,11 @@ async def test_calculate_route_princeton_to_columbus(ctx):
             logger.warning('No turn-by-turn directions found in route result!')
 
 
+@pytest.mark.skipif(
+    not (os.environ.get('AWS_ACCESS_KEY_ID') or os.environ.get('AWS_PROFILE')),
+    reason='AWS credentials not set',
+)
+@pytest.mark.asyncio
 async def test_calculate_route_and_optimize_waypoints(ctx):
     """Test route calculation and waypoint optimization between Seattle, Bellevue, and Redmond."""
     logger.info('\n=== calculate_route ===')
@@ -153,15 +170,13 @@ async def test_calculate_route_and_optimize_waypoints(ctx):
 
 async def main():
     """Run integration tests for AWS Location MCP server."""
-    # Ensure AWS credentials and region are set
+    # Skip the main function since we're using fixtures now
     if not (os.environ.get('AWS_ACCESS_KEY_ID') or os.environ.get('AWS_PROFILE')):
         logger.error('AWS credentials not set.')
         return
     if not os.environ.get('AWS_REGION'):
         logger.error('AWS_REGION not set.')
         return
-
-    ctx = DummyContext(_request_context=None, _fastmcp=None)
 
     logger.info('\n=== search_places (POI query) ===')
     search_result = await search_places(ctx, query='Starbucks, Seattle', max_results=3)
