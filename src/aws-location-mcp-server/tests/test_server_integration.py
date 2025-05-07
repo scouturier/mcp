@@ -339,7 +339,39 @@ async def main():
         else:
             logger.info(f'{len(places)} places found:')
             for place in places:
-                log_place(place)
+                logger.info(f'Name: {place.get("name", "Not available")}')
+                logger.info(f'Address: {place.get("address", "Not available")}')
+                contacts = place.get('contacts', {})
+                logger.info(f'Phones: {", ".join(contacts.get("phones", [])) or "Not available"}')
+                logger.info(f'Websites: {", ".join(contacts.get("websites", [])) or "Not available"}')
+                # Don't log emails as they could be PII
+                logger.info(f'Faxes: {", ".join(contacts.get("faxes", [])) or "Not available"}')
+                logger.info(f'Categories: {", ".join(place.get("categories", [])) or "Not available"}')
+                coords = place.get('coordinates', {})
+                logger.info(
+                    f'Coordinates: {coords.get("longitude", "Not available")}, {coords.get("latitude", "Not available")}'
+                )
+                opening_hours = place.get('opening_hours', [])
+                if opening_hours:
+                    logger.info('Operating Hours:')
+                    for oh in opening_hours:
+                        display = oh.get('display', [])
+                        components = oh.get('components', [])
+                        open_now = oh.get('open_now', None)
+                        categories = oh.get('categories', [])
+                        logger.info(f'  - Display: {"; ".join(display) if display else "Not available"}')
+                        logger.info(f'    Components: {components if components else "Not available"}')
+                        logger.info(
+                            f'    Open Now: {open_now if open_now is not None else "Not available"}'
+                        )
+                        logger.info(
+                            f'    Categories: {", ".join(categories) if categories else "Not available"}'
+                        )
+                else:
+                    logger.info('Operating Hours: Not available')
+                logger.info('-')
+    await test_calculate_route_and_optimize_waypoints(ctx)
+    await test_calculate_route_princeton_to_columbus(ctx)
 
     logger.info('Integration tests completed successfully.')
 
