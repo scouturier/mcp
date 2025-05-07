@@ -19,6 +19,7 @@ from awslabs.aws_location_server.server import (
     main,
     reverse_geocode,
     search_places,
+    search_places_open_now,
 )
 from unittest.mock import MagicMock, patch
 
@@ -72,8 +73,7 @@ async def test_search_places_client_error(mock_boto3_client, mock_context):
 
     # Set up boto3 client to raise ClientError
     mock_boto3_client.geocode.side_effect = ClientError(
-        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
-        'geocode'
+        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}}, 'geocode'
     )
 
     with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
@@ -111,8 +111,8 @@ async def test_get_place(mock_boto3_client, mock_context):
             'Phones': [{'Value': '123-456-7890'}],
             'Websites': [{'Value': 'https://example.com'}],
             'Emails': [],
-            'Faxes': []
-        }
+            'Faxes': [],
+        },
     }
 
     # Patch the geo_places_client in the server module
@@ -137,7 +137,7 @@ async def test_get_place_raw_mode(mock_boto3_client, mock_context):
     mock_response = {
         'Title': 'Test Place',
         'Address': {'Label': '123 Test St, Test City, TS'},
-        'Position': [-122.3321, 47.6062]
+        'Position': [-122.3321, 47.6062],
     }
     mock_boto3_client.get_place.return_value = mock_response
 
@@ -185,7 +185,7 @@ async def test_reverse_geocode(mock_boto3_client, mock_context):
             'Title': 'Test Place',
             'Geometry': {'Point': [-122.3321, 47.6062]},
             'Categories': [{'Name': 'Restaurant'}],
-            'Address': {'Label': '123 Test St, Test City, TS'}
+            'Address': {'Label': '123 Test St, Test City, TS'},
         }
     }
 
@@ -236,8 +236,7 @@ async def test_reverse_geocode_client_error(mock_boto3_client, mock_context):
 
     # Set up boto3 client to raise ClientError
     mock_boto3_client.reverse_geocode.side_effect = ClientError(
-        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
-        'reverse_geocode'
+        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}}, 'reverse_geocode'
     )
 
     with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
@@ -278,8 +277,8 @@ async def test_search_nearby(mock_boto3_client, mock_context):
                     'Phones': [{'Value': '123-456-7890'}],
                     'Websites': [{'Value': 'https://example.com'}],
                     'Emails': [],
-                    'Faxes': []
-                }
+                    'Faxes': [],
+                },
             }
         ]
     }
@@ -295,10 +294,6 @@ async def test_search_nearby(mock_boto3_client, mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-            max_results=5,
-            max_radius=10000,
-            expansion_factor=2.0,
-            mode='summary'
         )
 
     # Verify the result
@@ -324,7 +319,7 @@ async def test_search_nearby_raw_mode(mock_boto3_client, mock_context):
                 'PlaceId': 'test-place-id',
                 'Title': 'Test Place',
                 'Address': {'Label': '123 Test St, Test City, TS'},
-                'Position': [-122.3321, 47.6062]
+                'Position': [-122.3321, 47.6062],
             }
         ]
     }
@@ -340,17 +335,13 @@ async def test_search_nearby_raw_mode(mock_boto3_client, mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-            max_results=5,
-            max_radius=10000,
-            expansion_factor=2.0,
-            mode='raw'
         )
 
     # Verify the raw result is returned
     assert 'places' in result
     assert len(result['places']) == 1
-    assert result['places'][0]['PlaceId'] == 'test-place-id'
-    assert result['places'][0]['Title'] == 'Test Place'
+    assert result['places'][0]['place_id'] == 'test-place-id'
+    assert result['places'][0]['name'] == 'Test Place'
 
 
 @pytest.mark.asyncio
@@ -365,10 +356,10 @@ async def test_search_nearby_no_results_expansion(mock_boto3_client, mock_contex
                     'PlaceId': 'test-place-id',
                     'Title': 'Test Place',
                     'Address': {'Label': '123 Test St, Test City, TS'},
-                    'Position': [-122.3321, 47.6062]
+                    'Position': [-122.3321, 47.6062],
                 }
             ]
-        }
+        },
     ]
 
     # Import the function directly to avoid Field validation issues
@@ -382,10 +373,6 @@ async def test_search_nearby_no_results_expansion(mock_boto3_client, mock_contex
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-            max_radius=2000,
-            expansion_factor=2.0,
-            max_results=5,
-            mode='summary'
         )
 
     # Verify the result with expanded radius
@@ -407,10 +394,6 @@ async def test_search_nearby_error_no_client(mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-            max_results=5,
-            max_radius=10000,
-            expansion_factor=2.0,
-            mode='summary'
         )
 
     assert 'error' in result
@@ -433,10 +416,6 @@ async def test_search_nearby_exception(mock_boto3_client, mock_context):
             longitude=-122.3321,
             latitude=47.6062,
             radius=500,
-            max_results=5,
-            max_radius=10000,
-            expansion_factor=2.0,
-            mode='summary'
         )
 
     assert 'error' in result
@@ -447,21 +426,24 @@ async def test_search_nearby_exception(mock_boto3_client, mock_context):
 async def test_search_places_open_now(mock_boto3_client, mock_context):
     """Test the search_places_open_now tool."""
     # Set up mock responses
-    mock_boto3_client.geocode.return_value = {
-        'ResultItems': [{'Position': [-122.3321, 47.6062]}]
-    }
+    mock_boto3_client.geocode.return_value = {'ResultItems': [{'Position': [-122.3321, 47.6062]}]}
     mock_boto3_client.search_text.return_value = {
         'ResultItems': [
             {
                 'PlaceId': 'test-place-id',
                 'Title': 'Test Place',
-                'Address': {'Label': '123 Test St, Test City, TS', 'Country': {'Name': 'USA'}, 'Region': {'Name': 'WA'}, 'Locality': 'Seattle'},
+                'Address': {
+                    'Label': '123 Test St, Test City, TS',
+                    'Country': {'Name': 'USA'},
+                    'Region': {'Name': 'WA'},
+                    'Locality': 'Seattle',
+                },
                 'Position': [-122.3321, 47.6062],
                 'Categories': [{'Name': 'Restaurant'}],
                 'Contacts': {
                     'Phones': [{'Value': '123-456-7890'}],
-                    'OpeningHours': {'Display': ['Mon-Fri: 9AM-5PM'], 'OpenNow': True}
-                }
+                    'OpeningHours': {'Display': ['Mon-Fri: 9AM-5PM'], 'OpenNow': True},
+                },
             }
         ]
     }
@@ -477,10 +459,7 @@ async def test_search_places_open_now(mock_boto3_client, mock_context):
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-            max_results=5,
             initial_radius=500,
-            max_radius=50000,
-            expansion_factor=2.0
         )
 
     # Verify the result
@@ -509,10 +488,7 @@ async def test_search_places_open_now_no_geocode_results(mock_boto3_client, mock
         result = await search_places_open_now_func(
             mock_context,
             query='NonexistentPlace',
-            max_results=5,
             initial_radius=500,
-            max_radius=50000,
-            expansion_factor=2.0
         )
 
     assert 'error' in result
@@ -532,10 +508,7 @@ async def test_search_places_open_now_error_no_client(mock_context):
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-            max_results=5,
             initial_radius=500,
-            max_radius=50000,
-            expansion_factor=2.0
         )
 
     assert 'error' in result
@@ -549,8 +522,7 @@ async def test_search_places_open_now_client_error(mock_boto3_client, mock_conte
 
     # Set up boto3 client to raise ClientError
     mock_boto3_client.geocode.side_effect = ClientError(
-        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
-        'geocode'
+        {'Error': {'Code': 'TestException', 'Message': 'Test error message'}}, 'geocode'
     )
 
     # Import the function directly to avoid Field validation issues
@@ -563,10 +535,7 @@ async def test_search_places_open_now_client_error(mock_boto3_client, mock_conte
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-            max_results=5,
             initial_radius=500,
-            max_radius=50000,
-            expansion_factor=2.0
         )
 
     assert 'error' in result
@@ -589,14 +558,11 @@ async def test_search_places_open_now_general_exception(mock_boto3_client, mock_
         result = await search_places_open_now_func(
             mock_context,
             query='restaurants Seattle',
-            max_results=5,
             initial_radius=500,
-            max_radius=50000,
-            expansion_factor=2.0
         )
 
     assert 'error' in result
-    assert 'Error searching for open places' in result['error']
+    assert 'Test general exception' in result['error']
 
 
 def test_geo_places_client_initialization(monkeypatch):
@@ -614,8 +580,8 @@ def test_geo_places_client_initialization(monkeypatch):
 def test_geo_places_client_initialization_with_credentials(monkeypatch):
     """Test the GeoPlacesClient initialization with explicit credentials."""
     monkeypatch.setenv('AWS_REGION', 'us-west-2')
-    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'test-access-key')
-    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'test-secret-key')
+    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'test-access-key')  # pragma: allowlist secret
+    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'test-secret-key')  # pragma: allowlist secret
 
     with patch('boto3.client') as mock_boto3_client:
         _ = GeoPlacesClient()
@@ -654,3 +620,164 @@ def test_main_sse():
             mock_run.assert_called_once()
             args, kwargs = mock_run.call_args
             assert kwargs.get('transport') == 'sse'
+
+
+@pytest.mark.asyncio
+async def test_search_places_with_bounding_box(mock_boto3_client, mock_context):
+    """Test search_places with bounding box filter when initial search returns no results."""
+    # Set up mock responses
+    mock_boto3_client.geocode.return_value = {'ResultItems': [{'Position': [-122.3321, 47.6062]}]}
+
+    # First search_text call returns empty results, second call with bounding box returns results
+    mock_boto3_client.search_text.side_effect = [
+        {'ResultItems': []},  # First call returns empty
+        {  # Second call with bounding box returns results
+            'ResultItems': [
+                {
+                    'PlaceId': 'test-place-id',
+                    'Title': 'Test Place',
+                    'Address': {'Label': '123 Test St, Test City, TS'},
+                    'Position': [-122.3321, 47.6062],
+                    'Categories': [{'Name': 'Restaurant'}],
+                }
+            ]
+        },
+    ]
+
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_places(mock_context, query='Seattle', max_results=5)
+
+    # Verify the result
+    assert 'places' in result
+    assert len(result['places']) == 1
+    assert result['places'][0]['name'] == 'Test Place'
+
+
+@pytest.mark.asyncio
+async def test_search_places_with_opening_hours(mock_boto3_client, mock_context):
+    """Test search_places with opening hours in the response."""
+    # Set up mock responses
+    mock_boto3_client.geocode.return_value = {'ResultItems': [{'Position': [-122.3321, 47.6062]}]}
+    mock_boto3_client.search_text.return_value = {
+        'ResultItems': [
+            {
+                'PlaceId': 'test-place-id',
+                'Title': 'Test Place',
+                'Address': {'Label': '123 Test St, Test City, TS'},
+                'Position': [-122.3321, 47.6062],
+                'Categories': [{'Name': 'Restaurant'}],
+                'Contacts': {
+                    'OpeningHours': {
+                        'Display': ['Mon-Fri: 9AM-5PM'],
+                        'OpenNow': True,
+                        'Components': [{'DayOfWeek': 'Monday', 'Hours': '9AM-5PM'}],
+                    }
+                },
+            }
+        ]
+    }
+
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_places(mock_context, query='Seattle', max_results=5)
+
+    # Verify the result
+    assert 'places' in result
+    assert len(result['places']) == 1
+    assert result['places'][0]['name'] == 'Test Place'
+    assert len(result['places'][0]['opening_hours']) == 1
+    assert result['places'][0]['opening_hours'][0]['open_now'] is True
+    assert result['places'][0]['opening_hours'][0]['display'] == ['Mon-Fri: 9AM-5PM']
+
+
+@pytest.mark.asyncio
+async def test_search_places_open_now_with_contacts_opening_hours(mock_boto3_client, mock_context):
+    """Test search_places_open_now with opening hours in Contacts."""
+    # Set up mock responses
+    mock_boto3_client.geocode.return_value = {'ResultItems': [{'Position': [-122.3321, 47.6062]}]}
+    mock_boto3_client.search_text.return_value = {
+        'ResultItems': [
+            {
+                'PlaceId': 'test-place-id',
+                'Title': 'Test Place',
+                'Address': {'Label': '123 Test St, Test City, TS'},
+                'Position': [-122.3321, 47.6062],
+                'Categories': [{'Name': 'Restaurant'}],
+                'Contacts': {
+                    'OpeningHours': {
+                        'Display': ['Mon-Fri: 9AM-5PM'],
+                        'OpenNow': True,
+                    }
+                },
+            }
+        ]
+    }
+
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_places_open_now(
+            mock_context,
+            query='restaurants Seattle',
+            initial_radius=500,
+        )
+
+    # Verify the result
+    assert 'open_places' in result
+    assert len(result['open_places']) == 1
+    assert result['open_places'][0]['name'] == 'Test Place'
+    assert result['open_places'][0]['open_now'] is True
+
+
+@pytest.mark.asyncio
+async def test_search_places_open_now_with_expanded_radius(mock_boto3_client, mock_context):
+    """Test search_places_open_now with radius expansion."""
+    # Set up mock responses
+    mock_boto3_client.geocode.return_value = {'ResultItems': [{'Position': [-122.3321, 47.6062]}]}
+
+    # First search returns no open places, second search with expanded radius returns open places
+    mock_boto3_client.search_text.side_effect = [
+        {  # First call returns places but none are open
+            'ResultItems': [
+                {
+                    'PlaceId': 'test-place-id-1',
+                    'Title': 'Test Place 1',
+                    'Address': {'Label': '123 Test St, Test City, TS'},
+                    'Position': [-122.3321, 47.6062],
+                    'Categories': [{'Name': 'Restaurant'}],
+                    'OpeningHours': {'Display': ['Mon-Fri: 9AM-5PM'], 'OpenNow': False},
+                }
+            ]
+        },
+        {  # Second call with expanded radius returns open places
+            'ResultItems': [
+                {
+                    'PlaceId': 'test-place-id-2',
+                    'Title': 'Test Place 2',
+                    'Address': {'Label': '456 Test St, Test City, TS'},
+                    'Position': [-122.3421, 47.6162],
+                    'Categories': [{'Name': 'Restaurant'}],
+                    'OpeningHours': {'Display': ['Mon-Fri: 9AM-5PM'], 'OpenNow': True},
+                }
+            ]
+        },
+    ]
+
+    # Patch the geo_places_client in the server module
+    with patch('awslabs.aws_location_server.server.geo_places_client') as mock_geo_client:
+        mock_geo_client.geo_places_client = mock_boto3_client
+        result = await search_places_open_now(
+            mock_context,
+            query='restaurants Seattle',
+            initial_radius=500,
+        )
+
+    # Verify the result
+    assert 'open_places' in result
+    assert len(result['open_places']) == 1
+    assert result['open_places'][0]['name'] == 'Test Place 2'
+    assert result['open_places'][0]['open_now'] is True
+    assert result['radius_used'] == 500.0  # Initial radius
