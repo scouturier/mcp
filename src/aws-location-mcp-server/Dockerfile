@@ -68,9 +68,8 @@ RUN chmod +x /usr/local/bin/docker-healthcheck.sh
 # Run as non-root
 USER app
 
-# Set environment variables for AWS Location Service
-ENV AWS_REGION=us-east-1
-ENV AWS_LOCATION_PLACE_INDEX=MCPDemo
+# AWS_REGION should be provided at runtime
+# Example: docker run -e AWS_REGION=us-east-1 image_name
 
 # Health check and entrypoint
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 CMD [ "docker-healthcheck.sh" ]

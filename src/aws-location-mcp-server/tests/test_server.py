@@ -750,8 +750,8 @@ def test_geo_routes_client_initialization(monkeypatch):
 def test_geo_routes_client_initialization_with_credentials(monkeypatch):
     """Test the GeoRoutesClient initialization with explicit credentials."""
     monkeypatch.setenv('AWS_REGION', 'us-west-2')
-    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'test-access-key')  # pragma: allowlist secret
-    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'test-secret-key')  # pragma: allowlist secret
+    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')  # pragma: allowlist secret - Test credential for unit tests only
+    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')  # pragma: allowlist secret - Test credential for unit tests only
 
     with patch('boto3.client') as mock_boto3_client:
         _ = GeoRoutesClient()
@@ -759,8 +759,8 @@ def test_geo_routes_client_initialization_with_credentials(monkeypatch):
         args, kwargs = mock_boto3_client.call_args
         assert args[0] == 'geo-routes'
         assert kwargs['region_name'] == 'us-west-2'
-        assert kwargs['aws_access_key_id'] == 'test-access-key'
-        assert kwargs['aws_secret_access_key'] == 'test-secret-key'
+        assert kwargs['aws_access_key_id'] == 'AKIAIOSFODNN7EXAMPLE'
+        assert kwargs['aws_secret_access_key'] == 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
 
 
 def test_geo_routes_client_initialization_exception():
@@ -956,8 +956,8 @@ async def test_search_places_open_now_with_expanded_radius(mock_boto3_client, mo
 def test_geo_places_client_initialization_with_credentials(monkeypatch):
     """Test the GeoPlacesClient initialization with explicit credentials."""
     monkeypatch.setenv('AWS_REGION', 'us-west-2')
-    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'test-access-key')  # pragma: allowlist secret
-    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'test-secret-key')  # pragma: allowlist secret
+    monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'AKIAIOSFODNN7EXAMPLE')  # pragma: allowlist secret - Test credential for unit tests only
+    monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')  # pragma: allowlist secret - Test credential for unit tests only
 
     with patch('boto3.client') as mock_boto3_client:
         _ = GeoPlacesClient()
@@ -965,8 +965,8 @@ def test_geo_places_client_initialization_with_credentials(monkeypatch):
         args, kwargs = mock_boto3_client.call_args
         assert args[0] == 'geo-places'
         assert kwargs['region_name'] == 'us-west-2'
-        assert kwargs['aws_access_key_id'] == 'test-access-key'
-        assert kwargs['aws_secret_access_key'] == 'test-secret-key'
+        assert kwargs['aws_access_key_id'] == 'AKIAIOSFODNN7EXAMPLE'
+        assert kwargs['aws_secret_access_key'] == 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'
 
 
 def test_geo_places_client_initialization_exception():
