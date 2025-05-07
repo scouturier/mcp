@@ -187,13 +187,15 @@ A server for AWS Terraform best practices.
 
 [![PyPI version](https://img.shields.io/pypi/v/awslabs.aws-location-mcp-server.svg)](https://pypi.org/project/awslabs.aws-location-mcp-server/)
 
-A server for accessing AWS Location Service capabilities, focusing on place search and geographical coordinates.
+A server for accessing AWS Location Service capabilities, focusing on place search, geographical coordinates, and route planning.
 
 - Search for places using geocoding
 - Get details for specific places by PlaceId
 - Reverse geocode coordinates to addresses
 - Search for places near a location
 - Search for places that are currently open
+- Calculate routes between locations with turn-by-turn directions
+- Optimize waypoints for efficient routing
 
 [Learn more](src/aws-location-mcp-server/README.md)
 
