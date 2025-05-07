@@ -21,6 +21,7 @@ A suite of specialized MCP servers that help you get the most out of AWS, wherev
   - [AWS Diagram MCP Server](#aws-diagram-mcp-server)
   - [AWS Lambda MCP Server](#aws-lambda-mcp-server)
   - [AWS Terraform MCP Server](#aws-terraform-mcp-server)
+  - [AWS Location Service MCP Server](#aws-location-service-mcp-server)
   - [Use Cases for the Servers](#use-cases-for-the-servers)
 - [Installation and Setup](#installation-and-setup)
   - [Getting Started with Cline and Amazon Bedrock](#getting-started-with-cline-and-amazon-bedrock)
