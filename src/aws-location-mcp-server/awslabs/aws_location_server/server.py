@@ -665,6 +665,11 @@ async def calculate_route(
     include_leg_geometry = False
     mode = 'summary'
     client = GeoRoutesClient().geo_routes_client
+
+    # Check if client is None before proceeding
+    if client is None:
+        return {'error': 'Failed to initialize AWS geo-routes client'}
+
     params = {
         'Origin': departure_position,
         'Destination': destination_position,
@@ -730,6 +735,11 @@ async def optimize_waypoints(
     Returns summary (optimized order, total distance, duration, etc.) or full response if mode='raw'.
     """
     client = GeoRoutesClient().geo_routes_client
+
+    # Check if client is None before proceeding
+    if client is None:
+        return {'error': 'Failed to initialize AWS geo-routes client'}
+
     params = {
         'Origin': origin_position,
         'Destination': destination_position,
