@@ -12,7 +12,6 @@ from awslabs.aws_location_server.server import (
 )
 from mcp.server.fastmcp import Context
 
-
 # Set up a logger instead of using print for sensitive data
 logger = logging.getLogger('integration_tests')
 logger.setLevel(logging.INFO)
@@ -70,8 +69,7 @@ async def test_calculate_route_princeton_to_columbus(ctx):
         departure_position=departure,
         destination_position=destination,
         travel_mode='Car',
-        include_leg_geometry=False,
-        mode='summary',
+        optimize_for='FastestRoute',
     )
     if 'error' in route_result:
         logger.info(f'calculate_route error: {route_result["error"]}')
@@ -100,8 +98,7 @@ async def test_calculate_route_and_optimize_waypoints(ctx):
         departure_position=departure,
         destination_position=destination,
         travel_mode='Car',
-        include_leg_geometry=False,
-        mode='summary',  # Use summary to get processed output
+        optimize_for='FastestRoute',
     )
     if 'error' in route_result:
         logger.info(f'calculate_route error: {route_result["error"]}')

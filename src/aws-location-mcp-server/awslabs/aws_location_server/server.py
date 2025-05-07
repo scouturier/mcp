@@ -640,28 +640,27 @@ async def calculate_route(
     departure_position: list = Field(description='Departure position as [longitude, latitude]'),
     destination_position: list = Field(description='Destination position as [longitude, latitude]'),
     travel_mode: str = Field(default='Car', description="Travel mode: 'Car', 'Truck', 'Walking', or 'Bicycle' (default: 'Car')"),
-    include_leg_geometry: bool = Field(default=False, description='Whether to include leg geometry in the response (default: False)'),
-    mode: str = Field(default='summary', description="Output mode: 'summary' (default) or 'raw' for full response"),
+    optimize_for: str = Field(default='FastestRoute', description="Optimize route for 'FastestRoute' or 'ShortestRoute' (default: 'FastestRoute')")
 ) -> dict:
     """
     Calculate a route and return summary info and turn-by-turn directions.
-    Always includes turn-by-turn directions in the output as 'turn_by_turn'.
     Parameters:
         departure_position: [lon, lat]
         destination_position: [lon, lat]
         travel_mode: 'Car', 'Truck', 'Walking', or 'Bicycle' (default: 'Car')
-        include_leg_geometry: bool
-        mode: 'summary' (default) or 'raw'
+        optimize_for: 'FastestRoute' or 'ShortestRoute' (default: 'FastestRoute')
     Returns:
         dict with distance, duration, and turn_by_turn directions (list of step summaries)
     """
+    include_leg_geometry = False
+    mode = 'summary'
     client = GeoRoutesClient().geo_routes_client
     params = {
         'Origin': departure_position,
         'Destination': destination_position,
         'TravelMode': travel_mode,
         'TravelStepType': 'TurnByTurn',
-        'OptimizeRoutingFor': 'FastestRoute',
+        'OptimizeRoutingFor': optimize_for,
     }
     if include_leg_geometry:
         params['LegGeometryFormat'] = 'FlexiblePolyline'
@@ -677,26 +676,21 @@ async def calculate_route(
         duration_seconds = route.get('DurationSeconds', None)
         turn_by_turn = []
         for leg in route.get('Legs', []):
-            # geometry = leg.get('Geometry', {})  # Commented out: geometry/polyline for reference
             vehicle_leg_details = leg.get('VehicleLegDetails', {})
             for step in vehicle_leg_details.get('TravelSteps', []):
                 step_summary = {
                     'distance_meters': step.get('Distance'),
                     'duration_seconds': step.get('Duration'),
                     'type': step.get('Type'),
-                    # 'next_road': step.get('NextRoad'),  # Commented out: detailed next_road info
                     'road_name': step.get('NextRoad', {}).get('RoadName') if step.get('NextRoad') else None,
                 }
                 turn_by_turn.append(step_summary)
         return {
             'distance_meters': distance_meters,
             'duration_seconds': duration_seconds,
-            # 'legs': legs,  # Commented out: full legs structure for reference
             'turn_by_turn': turn_by_turn,
         }
     except Exception as e:
-        # import traceback
-        # return {'error': str(e), 'traceback': traceback.format_exc()}
         return {'error': str(e)}
 
 
