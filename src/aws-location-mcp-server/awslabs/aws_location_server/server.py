@@ -41,7 +41,7 @@ mcp = FastMCP(
     ## Features
     - Search for places using text queries
     - Get place details by PlaceId
-    - Get coordinates for a location name or address
+    - Geocode location names/addresses to coordinates
     - Reverse geocode coordinates to addresses
     - Search for places nearby a location
     - Search for places open now (extension)
@@ -57,7 +57,7 @@ mcp = FastMCP(
     - Provide specific location details for more accurate results
     - Use the search_places tool for general search
     - Use get_place for details on a specific place
-    - Use get_coordinates to convert location names/addresses to lat/lon
+    - Use geocode to convert location names/addresses to lat/lon
     - Use reverse_geocode to convert lat/lon to addresses
     - Use search_nearby for places near a point
     - Use search_places_open_now to find currently open places (if supported by data)
@@ -386,7 +386,7 @@ async def reverse_geocode(
 
 
 @mcp.tool()
-async def get_coordinates(
+async def geocode(
     ctx: Context,
     location: str = Field(description='Location name or address to geocode'),
 ) -> Dict:
